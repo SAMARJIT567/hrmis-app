@@ -43,6 +43,8 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
     _leaveFilterYear = now.year;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndPromptLocation();
+      context.read<LeaveProvider>().loadLeaves();
+      context.read<EmployeeAttendanceProvider>().loadMyAttendance();
     });
   }
 
@@ -234,6 +236,8 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
   Widget _buildTodayCard(BuildContext context) {
     return Consumer<EmployeeAttendanceProvider>(
       builder: (_, provider, __) {
+        final authUser = context.watch<AuthProvider>().currentUser;
+        final isHoldUser = authUser?.attendanceFlag?.toLowerCase() == 'hold';
         final today = DateFormat('EEEE, dd MMM yyyy').format(DateTime.now());
 
         return Container(
@@ -244,7 +248,48 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
             children: [
               Text(today, style: GoogleFonts.poppins(fontSize: 14.sp, color: Colors.white70)),
               SizedBox(height: 16.h),
-              if (!provider.isCheckedIn) ...[
+              if (isHoldUser) ...[
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 14.w),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16.r),
+                    boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8, offset: const Offset(0, 2))],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.fingerprint_rounded, color: AppColors.primary, size: 24.sp),
+                          SizedBox(width: 8.w),
+                          Flexible(
+                            child: Text(
+                              'Biometric Machine Attendance Only',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13.sp,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 6.h),
+                      Text(
+                        'App attendance is disabled for your account. Please mark attendance using the office biometric fingerprint machine.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.sp,
+                          color: AppColors.textSecondary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ] else if (!provider.isCheckedIn) ...[
                 _actionButton(
                   icon: Icons.login_rounded, 
                   label: 'Submit Attendance', 
@@ -546,9 +591,42 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
     final auth = context.watch<AuthProvider>();
     final user = auth.currentUser;
 
-    if (leaveProv.isLoading || leaveProv.policies.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    final activePolicies = leaveProv.policies.isNotEmpty
+        ? leaveProv.policies
+        : const [
+            LeavePolicy(
+              id: 'CL',
+              title: 'Casual Leave',
+              description: 'Assam Govt: 12 days/year.',
+              totalDays: 12,
+              iconName: 'event_note_rounded',
+              colorValue: 0xFF1E40AF,
+            ),
+            LeavePolicy(
+              id: 'EL',
+              title: 'Earned Leave',
+              description: 'Assam Govt Rules: 30 days/year.',
+              totalDays: 30,
+              iconName: 'beach_access_rounded',
+              colorValue: 0xFF10B981,
+            ),
+            LeavePolicy(
+              id: 'HPL',
+              title: 'Half Pay Leave',
+              description: 'Earned at 20 days/year.',
+              totalDays: 20,
+              iconName: 'history_edu_rounded',
+              colorValue: 0xFFF59E0B,
+            ),
+            LeavePolicy(
+              id: 'COL',
+              title: 'Commuted Leave',
+              description: 'Medical ground leave with Full Pay.',
+              totalDays: 10,
+              iconName: 'medical_services_outlined',
+              colorValue: 0xFFEF4444,
+            ),
+          ];
 
     String formatDays(double value) {
       return value % 1 == 0 ? value.toInt().toString() : value.toStringAsFixed(1);
@@ -565,7 +643,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
     // 2. Calculate Total Allowed & Remaining (All policies combined) for the selected year
     double totalAllowed = 0;
     double totalUsed = 0;
-    for (var p in leaveProv.policies) {
+    for (var p in activePolicies) {
       double allowed = p.totalDays.toDouble();
       if (p.id == 'CO') {
         allowed += myCompOffs.where((c) {
@@ -641,9 +719,9 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
             shrinkWrap: true,
             padding: EdgeInsets.zero,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: leaveProv.policies.length,
+            itemCount: activePolicies.length,
             itemBuilder: (ctx, idx) {
-              final policy = leaveProv.policies[idx];
+              final policy = activePolicies[idx];
               
               double allowed = policy.totalDays.toDouble();
               if (policy.id == 'CO') {

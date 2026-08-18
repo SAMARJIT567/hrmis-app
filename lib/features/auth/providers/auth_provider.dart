@@ -25,6 +25,7 @@ class AuthUser {
   final String? noZoneRequired;
   final String? registeredDeviceId;
   final String? deviceName;
+  final String? attendanceFlag;
 
   const AuthUser({
     required this.id,
@@ -44,6 +45,7 @@ class AuthUser {
     this.noZoneRequired,
     this.registeredDeviceId,
     this.deviceName,
+    this.attendanceFlag,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -89,6 +91,7 @@ class AuthUser {
       noZoneRequired: json['no_zone_required']?.toString(),
       registeredDeviceId: json['registered_device_id']?.toString(),
       deviceName: json['device_name']?.toString(),
+      attendanceFlag: json['attendance_flag']?.toString(),
     );
   }
 
@@ -110,6 +113,7 @@ class AuthUser {
     'no_zone_required': noZoneRequired,
     'registered_device_id': registeredDeviceId,
     'device_name': deviceName,
+    'attendance_flag': attendanceFlag,
   };
 }
 

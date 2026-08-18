@@ -93,6 +93,9 @@ class LeaveProvider extends ChangeNotifier {
           colorValue: item['colorValue'],
         )).toList();
       }
+      if (_policies.isEmpty) {
+        _policies = _getDefaultPolicies();
+      }
 
       // Load Requests
       final String? requestsJson = prefs.getString('leave_requests');
@@ -231,7 +234,7 @@ class LeaveProvider extends ChangeNotifier {
         // Parse leave availability / policies dynamically from Laravel
         if (response['leave_availability'] != null) {
           final List<dynamic> availabilityList = response['leave_availability'];
-          _policies = availabilityList.map((item) {
+          final parsedPolicies = availabilityList.map((item) {
             final leaveType = item['leave_type'];
             final id = item['leave_type_id']?.toString() ?? '';
             final title = leaveType?['name']?.toString() ?? id;
@@ -268,6 +271,14 @@ class LeaveProvider extends ChangeNotifier {
               colorValue: colorValue,
             );
           }).toList();
+
+          if (parsedPolicies.isNotEmpty) {
+            _policies = parsedPolicies;
+          }
+        }
+
+        if (_policies.isEmpty) {
+          _policies = _getDefaultPolicies();
         }
 
         // Parse requests/applications
@@ -378,5 +389,42 @@ class LeaveProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  List<LeavePolicy> _getDefaultPolicies() {
+    return const [
+      LeavePolicy(
+        id: 'CL',
+        title: 'Casual Leave',
+        description: 'Assam Govt: 12 days/year. No carry forward. Not a regular leave. Cannot be clubbed with EL/Medical. Sundays/Holidays in between are NOT counted.',
+        totalDays: 12,
+        iconName: 'event_available',
+        colorValue: 0xFF10B981,
+      ),
+      LeavePolicy(
+        id: 'EL',
+        title: 'Earned Leave',
+        description: 'Assam Govt Rules: 30 days/year (15+15 credit). Max 300 days accumulation. Sandwich rule applies. No clubbing with CL.',
+        totalDays: 30,
+        iconName: 'work_history',
+        colorValue: 0xFF3B82F6,
+      ),
+      LeavePolicy(
+        id: 'HPL',
+        title: 'Half Pay Leave',
+        description: 'Earned at 20 days/year. Provides Half Salary. Can be converted to Commuted Leave for Full Pay (2:1 ratio).',
+        totalDays: 20,
+        iconName: 'timelapse',
+        colorValue: 0xFFF59E0B,
+      ),
+      LeavePolicy(
+        id: 'COL',
+        title: 'Commuted Leave',
+        description: 'Medical ground leave with Full Pay. Note: 1 day Commuted Leave = 2 days HPL deduction. Medical certificate mandatory.',
+        totalDays: 10,
+        iconName: 'local_hospital',
+        colorValue: 0xFFEF4444,
+      ),
+    ];
   }
 }
