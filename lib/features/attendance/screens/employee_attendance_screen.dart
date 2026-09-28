@@ -33,6 +33,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
   late int _leaveFilterYear;
   final List<int> _yearsList = [];
   bool _isLocationDialogShowing = false;
+  bool _showLogOutAgain = false;
 
   @override
   void initState() {
@@ -305,7 +306,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                     );
                   },
                 ),
-              ] else if (!provider.hasCheckedOut) ...[
+              ] else if (!provider.hasCheckedOut || _showLogOutAgain) ...[
                 _actionButton(
                   icon: Icons.logout_rounded, 
                   label: 'Log Out', 
@@ -338,7 +339,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                   ],
                 ],
               ] else ...[
-                // Option 1: Today's Attendance Completed confirmation with Log Out Again option
+                // Today's Attendance Completed confirmation
                 Container(
                   width: double.infinity,
                   padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
@@ -365,7 +366,11 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                 ),
                 SizedBox(height: 10.h),
                 InkWell(
-                  onTap: () => _handleLogOut(context, provider),
+                  onTap: () {
+                    setState(() {
+                      _showLogOutAgain = true;
+                    });
+                  },
                   borderRadius: BorderRadius.circular(8.r),
                   child: Padding(
                     padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
@@ -375,7 +380,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                         Icon(Icons.update_rounded, color: Colors.white70, size: 14.sp),
                         SizedBox(width: 4.w),
                         Text(
-                          'Leaving later? Tap to Log Out Again',
+                          'Leaving later? Tap to Log Out',
                           style: GoogleFonts.poppins(
                             fontSize: 11.sp,
                             color: Colors.white70,
@@ -439,6 +444,9 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
       }
 
       if (success && context.mounted) {
+        setState(() {
+          _showLogOutAgain = false;
+        });
         AppHelpers.showSuccess(context, 'Logged Out Successfully!');
       }
     } catch (e) {
