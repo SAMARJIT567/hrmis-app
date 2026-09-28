@@ -305,7 +305,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                     );
                   },
                 ),
-              ] else ...[
+              ] else if (!provider.hasCheckedOut) ...[
                 _actionButton(
                   icon: Icons.logout_rounded, 
                   label: 'Log Out', 
@@ -337,6 +337,69 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                     ),
                   ],
                 ],
+              ] else ...[
+                // Option 1: Today's Attendance Completed confirmation with Log Out Again option
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16.r),
+                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0, 2))],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle_rounded, color: AppColors.success, size: 22.sp),
+                          SizedBox(width: 8.w),
+                          Text(
+                            'Today\'s Attendance Completed',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13.sp,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 6.h),
+                      Text(
+                        'Logged in: ${todayRec?.checkIn ?? '--'}  •  Logged out: ${todayRec?.checkOut ?? '--'}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.5.sp,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 10.h),
+                InkWell(
+                  onTap: () => _handleLogOut(context, provider),
+                  borderRadius: BorderRadius.circular(8.r),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.update_rounded, color: Colors.white70, size: 14.sp),
+                        SizedBox(width: 4.w),
+                        Text(
+                          'Leaving later? Tap to Log Out Again',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11.sp,
+                            color: Colors.white70,
+                            decoration: TextDecoration.underline,
+                            decorationColor: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ],
           ),
