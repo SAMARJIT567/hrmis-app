@@ -242,6 +242,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
         final authUser = context.watch<AuthProvider>().currentUser;
         final isHoldUser = authUser?.attendanceFlag?.toLowerCase() == 'hold';
         final today = DateFormat('EEEE, dd MMM yyyy').format(DateTime.now());
+        final todayRec = provider.todayRecord;
 
         return Container(
           margin: EdgeInsets.all(16.r),
@@ -292,32 +293,8 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                     ],
                   ),
                 ),
-              ] else if (provider.isCompletedToday) ...[
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16.r),
-                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0, 2))],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.check_circle_rounded, color: AppColors.success, size: 22.sp),
-                      SizedBox(width: 8.w),
-                      Text(
-                        'Today\'s Attendance Completed',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13.sp,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ] else if (!provider.isCheckedIn) ...[
+              ] else if (!provider.hasCheckedIn) ...[
+                // 1. Not Checked In: Submit Attendance
                 _actionButton(
                   icon: Icons.login_rounded, 
                   label: 'Submit Attendance', 
@@ -329,70 +306,20 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                     );
                   },
                 ),
-              ]
-              else
+              ] else if (!provider.hasCheckedOut) ...[
+                // 2. Checked In: Punch Out
                 _actionButton(
                   icon: Icons.logout_rounded, 
                   label: 'Punch Out', 
                   color: AppColors.error, 
-                  onTap: () async {
-                    // Show non-dismissible loading dialog
-                    showDialog(
-                      context: context,
-                      barrierDismissible: false,
-                      builder: (dialogCtx) => Center(
-                        child: Card(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-                          child: Padding(
-                            padding: EdgeInsets.all(20.r),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const CircularProgressIndicator(),
-                                SizedBox(height: 16.h),
-                                Text(
-                                  'Locking GPS & Logging Out...',
-                                  style: GoogleFonts.poppins(fontSize: 13.sp, fontWeight: FontWeight.w500),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-
-                    try {
-                      final locService = LocationService();
-                      await locService.checkLocationServices();
-                      await locService.requestPermission();
-                      final locationData = await locService.getCurrentLocation();
-                      final lat = locationData['latitude'] as double? ?? 0.0;
-                      final lon = locationData['longitude'] as double? ?? 0.0;
-
-                      final success = await provider.checkOut(
-                        latitude: lat,
-                        longitude: lon,
-                      );
-
-                      if (context.mounted) {
-                        Navigator.pop(context); // Pop the loading dialog
-                      }
-
-                      if (success && context.mounted) {
-                        AppHelpers.showSuccess(context, 'Logged Out Successfully!');
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        Navigator.pop(context); // Pop the loading dialog
-                        AppHelpers.showError(context, e.toString());
-                      }
-                    }
-                  }
+                  onTap: () => _handlePunchOut(context, provider),
                 ),
-              if (provider.isCheckedIn && provider.currentCheckInTime != null) ...[
                 SizedBox(height: 12.h),
-                Text('Logged in at: ${provider.currentCheckInTime}', style: GoogleFonts.poppins(fontSize: 12.sp, color: Colors.white70)),
-                if (provider.currentLateDuration != null && provider.currentLateDuration!.isNotEmpty) ...[
+                Text(
+                  'Logged in at: ${todayRec?.checkIn ?? provider.currentCheckInTime ?? '--'}', 
+                  style: GoogleFonts.poppins(fontSize: 12.sp, color: Colors.white),
+                ),
+                if ((todayRec?.lateDuration ?? provider.currentLateDuration)?.isNotEmpty == true) ...[
                   SizedBox(height: 4.h),
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
@@ -402,16 +329,154 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                       children: [
                         Icon(Icons.access_time, color: AppColors.warning, size: 12.sp),
                         SizedBox(width: 4.w),
-                        Text('Late by: ${provider.currentLateDuration}', style: GoogleFonts.poppins(fontSize: 10.sp, fontWeight: FontWeight.w600, color: AppColors.warning)),
+                        Text(
+                          'Late by: ${todayRec?.lateDuration ?? provider.currentLateDuration}', 
+                          style: GoogleFonts.poppins(fontSize: 10.sp, fontWeight: FontWeight.w600, color: AppColors.warning),
+                        ),
                       ],
                     ),
                   ),
                 ],
+              ] else ...[
+                // 3. Already Punched Out: Can update punch out if leaving later
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14.r),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _attendanceTimeChip(
+                        icon: Icons.login_rounded,
+                        label: 'In',
+                        time: todayRec?.checkIn ?? '--',
+                        color: Colors.greenAccent,
+                      ),
+                      Container(height: 28.h, width: 1, color: Colors.white24),
+                      _attendanceTimeChip(
+                        icon: Icons.logout_rounded,
+                        label: 'Out',
+                        time: todayRec?.checkOut ?? '--',
+                        color: Colors.redAccent,
+                      ),
+                      if (todayRec?.workHours != null && todayRec!.workHours!.isNotEmpty) ...[
+                        Container(height: 28.h, width: 1, color: Colors.white24),
+                        _attendanceTimeChip(
+                          icon: Icons.timelapse_rounded,
+                          label: 'Work',
+                          time: todayRec.workHours!,
+                          color: Colors.amberAccent,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                SizedBox(height: 14.h),
+                _actionButton(
+                  icon: Icons.update_rounded, 
+                  label: 'Punch Out (Update)', 
+                  color: AppColors.error, 
+                  onTap: () => _handlePunchOut(context, provider),
+                ),
+                SizedBox(height: 8.h),
+                Text(
+                  'Leaving later? Tap to update your exit time.',
+                  style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
               ],
             ],
           ),
         );
       },
+    );
+  }
+
+  Future<void> _handlePunchOut(BuildContext context, EmployeeAttendanceProvider provider) async {
+    // Show non-dismissible loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => Center(
+        child: Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+          child: Padding(
+            padding: EdgeInsets.all(20.r),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                SizedBox(height: 16.h),
+                Text(
+                  'Locking GPS & Punching Out...',
+                  style: GoogleFonts.poppins(fontSize: 13.sp, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final locService = LocationService();
+      await locService.checkLocationServices();
+      await locService.requestPermission();
+      final locationData = await locService.getCurrentLocation();
+      final lat = locationData['latitude'] as double? ?? 0.0;
+      final lon = locationData['longitude'] as double? ?? 0.0;
+
+      final success = await provider.checkOut(
+        latitude: lat,
+        longitude: lon,
+      );
+
+      if (context.mounted) {
+        Navigator.pop(context); // Pop loading dialog
+      }
+
+      if (success && context.mounted) {
+        AppHelpers.showSuccess(context, 'Punched Out Successfully!');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        Navigator.pop(context); // Pop loading dialog
+        AppHelpers.showError(context, e.toString());
+      }
+    }
+  }
+
+  Widget _attendanceTimeChip({
+    required IconData icon,
+    required String label,
+    required String time,
+    required Color color,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 13.sp),
+            SizedBox(width: 4.w),
+            Text(label, style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.white70)),
+          ],
+        ),
+        SizedBox(height: 2.h),
+        Text(
+          time,
+          style: GoogleFonts.poppins(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+      ],
     );
   }
 

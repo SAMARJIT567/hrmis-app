@@ -83,10 +83,9 @@ class EmployeeAttendanceProvider extends ChangeNotifier {
     return null;
   }
 
-  bool get isCompletedToday {
-    final r = todayRecord;
-    return r != null && r.checkIn != null && r.checkOut != null;
-  }
+  bool get hasCheckedIn => todayRecord?.checkIn != null;
+  bool get hasCheckedOut => todayRecord?.checkOut != null;
+  bool get isCompletedToday => hasCheckedIn && hasCheckedOut;
 
   int get presentCount {
     final now = DateTime.now();
@@ -397,6 +396,7 @@ class EmployeeAttendanceProvider extends ChangeNotifier {
       final isLate = rawStatus?.toLowerCase() == 'late' || (rawStatus == null && now.hour >= 10);
       final lateDuration = response['data'] != null ? response['data']['late_duration'] as String? : (isLate ? _calculateLateDuration(now) : null);
 
+      _records.removeWhere((r) => _isSameDay(r.date, now));
       _records.insert(0, EmployeeAttendanceRecord(
         id: response['data'] != null && response['data']['id'] != null
             ? response['data']['id'].toString()
@@ -423,7 +423,7 @@ class EmployeeAttendanceProvider extends ChangeNotifier {
   }
 
   Future<bool> checkOut({required double latitude, required double longitude}) async {
-    if (!_isCheckedIn) return false;
+    if (!hasCheckedIn) return false;
     _isLoading = true;
     notifyListeners();
 
@@ -465,12 +465,16 @@ class EmployeeAttendanceProvider extends ChangeNotifier {
           status: record.status,
           workHours: workHours,
           lateDuration: record.lateDuration,
+          leaveType: record.leaveType,
+          checkInSelfie: record.checkInSelfie,
+          latitude: latitude,
+          longitude: longitude,
         );
       }
 
       _isCheckedIn = false;
-      _currentCheckInTime = null;
-      _currentLateDuration = null;
+      _currentCheckInTime = index != -1 ? _records[index].checkIn : null;
+      _currentLateDuration = index != -1 ? _records[index].lateDuration : null;
       _isLoading = false;
       notifyListeners();
       return true;
