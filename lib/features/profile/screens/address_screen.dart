@@ -44,6 +44,13 @@ class AddressScreen extends StatelessWidget {
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.primary, size: 20.sp),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.edit_note_rounded, color: AppColors.primary, size: 24.sp),
+            tooltip: 'Edit Address',
+            onPressed: () => _showContactAdminDialog(context),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -93,7 +100,132 @@ class AddressScreen extends StatelessWidget {
               ],
             ),
             SizedBox(height: 24.h),
+
+            // Edit / Request Address Change Button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () => _showContactAdminDialog(context),
+                icon: Icon(Icons.edit_location_alt_rounded, size: 18.sp, color: AppColors.primary),
+                label: Text(
+                  'Request Address Change',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13.5.sp,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(vertical: 13.h),
+                  side: const BorderSide(color: AppColors.primary, width: 1.5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14.r)),
+                  backgroundColor: AppColors.primarySurface,
+                ),
+              ),
+            ),
+            SizedBox(height: 20.h),
           ],
+        ),
+      ),
+    );
+  }
+
+  void _showContactAdminDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
+        elevation: 0,
+        backgroundColor: Colors.white,
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 24.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 60.r,
+                height: 60.r,
+                decoration: const BoxDecoration(
+                  color: AppColors.primarySurface,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.admin_panel_settings_rounded,
+                  color: AppColors.primary,
+                  size: 32.sp,
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                'Contact Administrator',
+                style: GoogleFonts.poppins(
+                  fontSize: 17.sp,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 10.h),
+              Text(
+                'Address details are part of your official service records and can only be updated by the administration.',
+                style: GoogleFonts.poppins(
+                  fontSize: 12.5.sp,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 16.h),
+              Container(
+                padding: EdgeInsets.all(12.r),
+                decoration: BoxDecoration(
+                  color: AppColors.primarySurface,
+                  borderRadius: BorderRadius.circular(12.r),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 18.sp),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: Text(
+                        'Please contact your HR Department or System Administrator with valid address proof to update your records.',
+                        style: GoogleFonts.poppins(
+                          fontSize: 11.sp,
+                          color: AppColors.textPrimary,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 20.h),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: EdgeInsets.symmetric(vertical: 12.h),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'Understood',
+                    style: GoogleFonts.poppins(
+                      fontSize: 13.5.sp,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
