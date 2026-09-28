@@ -292,6 +292,31 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                     ],
                   ),
                 ),
+              ] else if (provider.isCompletedToday) ...[
+                Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.symmetric(vertical: 14.h, horizontal: 16.w),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16.r),
+                    boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0, 2))],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.check_circle_rounded, color: AppColors.success, size: 22.sp),
+                      SizedBox(width: 8.w),
+                      Text(
+                        'Today\'s Attendance Completed',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ] else if (!provider.isCheckedIn) ...[
                 _actionButton(
                   icon: Icons.login_rounded, 
@@ -308,7 +333,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
               else
                 _actionButton(
                   icon: Icons.logout_rounded, 
-                  label: 'Log Out', 
+                  label: 'Punch Out', 
                   color: AppColors.error, 
                   onTap: () async {
                     // Show non-dismissible loading dialog

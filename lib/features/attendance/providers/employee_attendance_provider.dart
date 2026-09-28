@@ -55,6 +55,39 @@ class EmployeeAttendanceProvider extends ChangeNotifier {
   String? get currentCheckInTime => _currentCheckInTime;
   String? get currentLateDuration => _currentLateDuration;
 
+  bool _isSameDay(String dateStr, DateTime target) {
+    try {
+      DateTime parsed;
+      if (dateStr.contains(RegExp(r'[a-zA-Z]'))) {
+        parsed = DateFormat('dd MMM yyyy').parse(dateStr);
+      } else {
+        parsed = DateFormat('yyyy-MM-dd').parse(dateStr);
+      }
+      return parsed.year == target.year &&
+             parsed.month == target.month &&
+             parsed.day == target.day;
+    } catch (_) {
+      final ymd = DateFormat('yyyy-MM-dd').format(target);
+      final dmy = DateFormat('dd MMM yyyy').format(target);
+      return dateStr == ymd || dateStr == dmy;
+    }
+  }
+
+  EmployeeAttendanceRecord? get todayRecord {
+    final now = DateTime.now();
+    for (final r in _records) {
+      if (_isSameDay(r.date, now)) {
+        return r;
+      }
+    }
+    return null;
+  }
+
+  bool get isCompletedToday {
+    final r = todayRecord;
+    return r != null && r.checkIn != null && r.checkOut != null;
+  }
+
   int get presentCount {
     final now = DateTime.now();
     final Set<String> uniquePresentDates = {};
@@ -312,8 +345,8 @@ class EmployeeAttendanceProvider extends ChangeNotifier {
     }
 
   void _checkTodayAttendance() {
-    final today = DateFormat('dd MMM yyyy').format(DateTime.now());
-    final index = _records.indexWhere((r) => r.date == today);
+    final now = DateTime.now();
+    final index = _records.indexWhere((r) => _isSameDay(r.date, now));
     if (index != -1) {
       final todayRecord = _records[index];
       _isCheckedIn = todayRecord.checkIn != null && todayRecord.checkOut == null;
@@ -354,7 +387,7 @@ class EmployeeAttendanceProvider extends ChangeNotifier {
       );
 
       final now = DateTime.now();
-      final today = DateFormat('dd MMM yyyy').format(now);
+      final todayYmd = DateFormat('yyyy-MM-dd').format(now);
       
       final checkInTime = response['data'] != null && response['data']['check_in'] != null
           ? response['data']['check_in'] as String
@@ -368,10 +401,10 @@ class EmployeeAttendanceProvider extends ChangeNotifier {
         id: response['data'] != null && response['data']['id'] != null
             ? response['data']['id'].toString()
             : DateTime.now().millisecondsSinceEpoch.toString(),
-        date: today,
+        date: todayYmd,
         checkIn: checkInTime,
         checkOut: null,
-        status: isLate ? 'Late' : 'Present',
+        status: isLate ? 'Late In' : 'Present',
         workHours: null,
         lateDuration: lateDuration,
       ));
@@ -402,13 +435,12 @@ class EmployeeAttendanceProvider extends ChangeNotifier {
       );
 
       final now = DateTime.now();
-      final today = DateFormat('dd MMM yyyy').format(now);
       
       final checkOutTime = response['data'] != null && response['data']['check_out'] != null
           ? response['data']['check_out'] as String
           : DateFormat('hh:mm a').format(now);
 
-      final index = _records.indexWhere((r) => r.date == today);
+      final index = _records.indexWhere((r) => _isSameDay(r.date, now));
       if (index != -1) {
         final record = _records[index];
         String workHours = '8h 0m';
