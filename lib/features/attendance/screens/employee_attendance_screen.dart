@@ -307,12 +307,12 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                   },
                 ),
               ] else if (!provider.hasCheckedOut) ...[
-                // 2. Checked In: Punch Out
+                // 2. Checked In: Log Out
                 _actionButton(
                   icon: Icons.logout_rounded, 
-                  label: 'Punch Out', 
+                  label: 'Log Out', 
                   color: AppColors.error, 
-                  onTap: () => _handlePunchOut(context, provider),
+                  onTap: () => _handleLogOut(context, provider),
                 ),
                 SizedBox(height: 12.h),
                 Text(
@@ -338,7 +338,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                   ),
                 ],
               ] else ...[
-                // 3. Already Punched Out: Can update punch out if leaving later
+                // 3. Already Logged Out: Can update log out if leaving later
                 Container(
                   width: double.infinity,
                   padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
@@ -378,9 +378,9 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                 SizedBox(height: 14.h),
                 _actionButton(
                   icon: Icons.update_rounded, 
-                  label: 'Punch Out (Update)', 
+                  label: 'Log Out (Update)', 
                   color: AppColors.error, 
-                  onTap: () => _handlePunchOut(context, provider),
+                  onTap: () => _handleLogOut(context, provider),
                 ),
                 SizedBox(height: 8.h),
                 Text(
@@ -396,7 +396,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
     );
   }
 
-  Future<void> _handlePunchOut(BuildContext context, EmployeeAttendanceProvider provider) async {
+  Future<void> _handleLogOut(BuildContext context, EmployeeAttendanceProvider provider) async {
     // Show non-dismissible loading dialog
     showDialog(
       context: context,
@@ -412,7 +412,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                 const CircularProgressIndicator(),
                 SizedBox(height: 16.h),
                 Text(
-                  'Locking GPS & Punching Out...',
+                  'Locking GPS & Logging Out...',
                   style: GoogleFonts.poppins(fontSize: 13.sp, fontWeight: FontWeight.w500),
                 ),
               ],
@@ -440,7 +440,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
       }
 
       if (success && context.mounted) {
-        AppHelpers.showSuccess(context, 'Punched Out Successfully!');
+        AppHelpers.showSuccess(context, 'Logged Out Successfully!');
       }
     } catch (e) {
       if (context.mounted) {
