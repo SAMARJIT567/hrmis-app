@@ -294,7 +294,6 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                   ),
                 ),
               ] else if (!provider.hasCheckedIn) ...[
-                // 1. Not Checked In: Submit Attendance
                 _actionButton(
                   icon: Icons.login_rounded, 
                   label: 'Submit Attendance', 
@@ -306,88 +305,38 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                     );
                   },
                 ),
-              ] else if (!provider.hasCheckedOut) ...[
-                // 2. Checked In: Log Out
+              ] else ...[
                 _actionButton(
                   icon: Icons.logout_rounded, 
                   label: 'Log Out', 
                   color: AppColors.error, 
                   onTap: () => _handleLogOut(context, provider),
                 ),
-                SizedBox(height: 12.h),
-                Text(
-                  'Logged in at: ${todayRec?.checkIn ?? provider.currentCheckInTime ?? '--'}', 
-                  style: GoogleFonts.poppins(fontSize: 12.sp, color: Colors.white),
-                ),
-                if ((todayRec?.lateDuration ?? provider.currentLateDuration)?.isNotEmpty == true) ...[
-                  SizedBox(height: 4.h),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-                    decoration: BoxDecoration(color: AppColors.warningLight, borderRadius: BorderRadius.circular(12.r)),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.access_time, color: AppColors.warning, size: 12.sp),
-                        SizedBox(width: 4.w),
-                        Text(
-                          'Late by: ${todayRec?.lateDuration ?? provider.currentLateDuration}', 
-                          style: GoogleFonts.poppins(fontSize: 10.sp, fontWeight: FontWeight.w600, color: AppColors.warning),
-                        ),
-                      ],
+                if ((todayRec?.checkIn ?? provider.currentCheckInTime) != null) ...[
+                  SizedBox(height: 12.h),
+                  Text(
+                    'Logged in at: ${todayRec?.checkIn ?? provider.currentCheckInTime}', 
+                    style: GoogleFonts.poppins(fontSize: 12.sp, color: Colors.white70),
+                  ),
+                  if ((todayRec?.lateDuration ?? provider.currentLateDuration)?.isNotEmpty == true) ...[
+                    SizedBox(height: 4.h),
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                      decoration: BoxDecoration(color: AppColors.warningLight, borderRadius: BorderRadius.circular(12.r)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.access_time, color: AppColors.warning, size: 12.sp),
+                          SizedBox(width: 4.w),
+                          Text(
+                            'Late by: ${todayRec?.lateDuration ?? provider.currentLateDuration}', 
+                            style: GoogleFonts.poppins(fontSize: 10.sp, fontWeight: FontWeight.w600, color: AppColors.warning),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                 ],
-              ] else ...[
-                // 3. Already Logged Out: Can update log out if leaving later
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.symmetric(vertical: 12.h, horizontal: 16.w),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(14.r),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _attendanceTimeChip(
-                        icon: Icons.login_rounded,
-                        label: 'In',
-                        time: todayRec?.checkIn ?? '--',
-                        color: Colors.greenAccent,
-                      ),
-                      Container(height: 28.h, width: 1, color: Colors.white24),
-                      _attendanceTimeChip(
-                        icon: Icons.logout_rounded,
-                        label: 'Out',
-                        time: todayRec?.checkOut ?? '--',
-                        color: Colors.redAccent,
-                      ),
-                      if (todayRec?.workHours != null && todayRec!.workHours!.isNotEmpty) ...[
-                        Container(height: 28.h, width: 1, color: Colors.white24),
-                        _attendanceTimeChip(
-                          icon: Icons.timelapse_rounded,
-                          label: 'Work',
-                          time: todayRec.workHours!,
-                          color: Colors.amberAccent,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                SizedBox(height: 14.h),
-                _actionButton(
-                  icon: Icons.update_rounded, 
-                  label: 'Log Out (Update)', 
-                  color: AppColors.error, 
-                  onTap: () => _handleLogOut(context, provider),
-                ),
-                SizedBox(height: 8.h),
-                Text(
-                  'Leaving later? Tap to update your exit time.',
-                  style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.white70),
-                  textAlign: TextAlign.center,
-                ),
               ],
             ],
           ),
@@ -448,36 +397,6 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
         AppHelpers.showError(context, e.toString());
       }
     }
-  }
-
-  Widget _attendanceTimeChip({
-    required IconData icon,
-    required String label,
-    required String time,
-    required Color color,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 13.sp),
-            SizedBox(width: 4.w),
-            Text(label, style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.white70)),
-          ],
-        ),
-        SizedBox(height: 2.h),
-        Text(
-          time,
-          style: GoogleFonts.poppins(
-            fontSize: 12.sp,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildQuickActions(BuildContext context) {
