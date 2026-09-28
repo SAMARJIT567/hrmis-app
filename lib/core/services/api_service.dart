@@ -1,10 +1,10 @@
 // 📁 lib/core/services/api_service.dart
 
+import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:developer';
 import 'package:flutter/foundation.dart';
-
 import '../config/app_config.dart';
 import 'device_info_service.dart';
 
@@ -12,6 +12,9 @@ class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
+
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  static VoidCallback? onUnauthorized;
 
   late final Dio _dio;        // Client for HRMIS (Port 8000)
   late final Dio _leaveDio;   // Client for Leave (Port 8001)
@@ -116,6 +119,10 @@ class ApiService {
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove('jwt_token');
           await prefs.remove('user_data');
+          onUnauthorized?.call();
+          if (navigatorKey.currentState != null) {
+            navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (route) => false);
+          }
         }
         return handler.next(error);
       },
@@ -153,9 +160,9 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> getEmployees() async {
+  Future<Map<String, dynamic>> getMasterData() async {
     try {
-      final response = await _dio.get('/employee');
+      final response = await _dio.get('/get-master-data');
       return response.data;
     } on DioException catch (e) {
       throw _handleError(e);
@@ -168,22 +175,7 @@ class ApiService {
       if (month != null) queryParams['month'] = month;
       if (year != null) queryParams['year'] = year;
 
-      final response = await _dio.get('/attendance', queryParameters: queryParams);
-      return response.data;
-    } on DioException catch (e) {
-      throw _handleError(e);
-    }
-  }
-
-  Future<Map<String, dynamic>> getAdminAttendance({required String date}) async {
-    try {
-      final response = await _dio.get(
-        '/attendance',
-        queryParameters: {
-          'type': 'admin',
-          'date': date,
-        },
-      );
+      final response = await _leaveDio.get('/attendance', queryParameters: queryParams);
       return response.data;
     } on DioException catch (e) {
       throw _handleError(e);
@@ -208,6 +200,7 @@ class ApiService {
         'device_id': deviceDetails.deviceId,
         'device_name': deviceDetails.deviceName,
         'imei': deviceDetails.deviceId,
+        'status': 'verified',
       };
 
       FormData formData = FormData.fromMap(fields);
@@ -222,7 +215,7 @@ class ApiService {
         ));
       }
 
-      final response = await _dio.post(
+      final response = await _leaveDio.post(
         '/submit-attendance',
         data: formData,
       );
@@ -234,7 +227,7 @@ class ApiService {
 
   Future<Map<String, dynamic>> getZones({bool all = false}) async {
     try {
-      final response = await _dio.get('/zones', queryParameters: all ? {'all': 'true'} : null);
+      final response = await _leaveDio.get('/zones', queryParameters: all ? {'all': 'true'} : null);
       return response.data;
     } on DioException catch (e) {
       throw _handleError(e);
@@ -279,7 +272,13 @@ class ApiService {
           'days': days,
         },
       );
-      return response.data;
+      if (response.data is Map<String, dynamic>) {
+        return response.data;
+      }
+      return {
+        'status': 'error',
+        'message': 'A server or database issue occurred. Please contact your system administrator.',
+      };
     } on DioException catch (e) {
       throw _handleError(e);
     }
@@ -307,20 +306,56 @@ class ApiService {
   String _handleError(DioException e) {
     if (e.response != null) {
       final data = e.response!.data;
-      if (data is Map<String, dynamic> && data.containsKey('error')) {
-        return data['error'] as String;
+      String? rawMsg;
+      if (data is Map<String, dynamic>) {
+        if (data.containsKey('error') && data['error'] != null) {
+          rawMsg = data['error'].toString();
+        } else if (data.containsKey('message') && data['message'] != null) {
+          rawMsg = data['message'].toString();
+        }
+      } else if (data is String) {
+        rawMsg = data;
       }
-      if (data is Map<String, dynamic> && data.containsKey('message')) {
-        return data['message'] as String;
+
+      final statusCode = e.response!.statusCode;
+      if (_isDatabaseOrServerIssue(rawMsg ?? '', statusCode)) {
+        return 'A required server or database component is missing. Please contact your system administrator.';
       }
-      return 'Server error: ${e.response!.statusCode}';
+
+      if (rawMsg != null && rawMsg.trim().isNotEmpty) {
+        if (rawMsg.contains('<html') || rawMsg.contains('<!DOCTYPE') || rawMsg.contains('<body') || rawMsg.contains('<head')) {
+          return 'A server or database issue occurred while processing your request. Please contact your system administrator.';
+        }
+        return rawMsg;
+      }
+
+      if (statusCode == 500) {
+        return 'Internal server error occurred. Please contact your system administrator.';
+      }
+      return 'Server error ($statusCode). Please contact your system administrator.';
     } else if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout) {
-      return 'Connection timeout. Please check your internet.';
+      return 'Connection timed out. Please check your internet connection.';
     } else if (e.type == DioExceptionType.connectionError) {
-      return 'No internet connection.';
+      return 'Unable to reach the server. Please verify your connection or contact administrator.';
     } else {
-      return 'Something went wrong. Please try again.';
+      return 'An unexpected issue occurred. Please contact your system administrator.';
     }
+  }
+
+  bool _isDatabaseOrServerIssue(String msg, int? statusCode) {
+    if (statusCode == 500) return true;
+    final lower = msg.toLowerCase();
+    return lower.contains('<!doctype') ||
+        lower.contains('<html') ||
+        lower.contains('<title>redirecting') ||
+        lower.contains('sqlstate') ||
+        lower.contains('queryexception') ||
+        lower.contains('pdoexception') ||
+        (lower.contains('table') && lower.contains('exist')) ||
+        lower.contains('column not found') ||
+        lower.contains('syntax error') ||
+        lower.contains('access violation') ||
+        (lower.contains('database') && lower.contains('error'));
   }
 }

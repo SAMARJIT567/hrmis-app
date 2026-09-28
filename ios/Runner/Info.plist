@@ -7,7 +7,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Hrmis New</string>
+	<string>AIDC HRMIS</string>
+	<key>NSCameraUsageDescription</key>
+	<string>AIDC HRMIS requires camera access to capture employee face photos during attendance punch in and punch out.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AIDC HRMIS requires microphone access when using camera features.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>AIDC HRMIS requires your location to verify you are within the designated office attendance geofence zone.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>AIDC HRMIS requires your location to verify you are within the designated office attendance geofence zone.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>AIDC HRMIS requires photo library access to upload profile pictures and leave attachment documents.</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

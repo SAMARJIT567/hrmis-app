@@ -7,12 +7,10 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -20,11 +18,11 @@ import '../../../core/constants/app_dimensions.dart';
 import '../../../core/utils/helpers.dart';
 import '../../../core/providers/navigation_provider.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../admin/screens/office_settings_screen.dart';
-import '../../admin/screens/location_settings_screen.dart';
 import '../../leave/screens/employee_leave_screen.dart';
 import '../../../core/services/api_service.dart';
-import '../../../core/services/device_info_service.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'address_screen.dart';
+import 'edit_profile_screen.dart';
 
 
 class ProfileScreen extends StatefulWidget {
@@ -36,21 +34,33 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   String? _profileImageBase64;
-  final ImagePicker _imagePicker = ImagePicker();
-  bool _isEditing = false;
-
-  late TextEditingController _nameController;
-  late TextEditingController _emailController;
-  late TextEditingController _departmentController;
-  late TextEditingController _designationController;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _loadProfileImage();
+    _loadAppVersion();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AuthProvider>().fetchProfile();
     });
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = 'v${info.version}';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _appVersion = 'v2.0.1';
+        });
+      }
+    }
   }
 
   void _loadProfileImage() async {
@@ -63,157 +73,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  void _startEditing(AuthUser user) {
-    _nameController = TextEditingController(text: user.name);
-    _emailController = TextEditingController(text: user.email);
-    _departmentController = TextEditingController(text: user.department);
-    _designationController = TextEditingController(text: user.designation);
-
-    setState(() {
-      _isEditing = true;
-    });
-  }
-
-  void _cancelEditing() {
-    setState(() {
-      _isEditing = false;
-    });
-    _nameController.dispose();
-    _emailController.dispose();
-    _departmentController.dispose();
-    _designationController.dispose();
-  }
-
-  Future<void> _saveProfile() async {
-    final auth = context.read<AuthProvider>();
-
-    await auth.updateCurrentUser(
-      name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
-      department: _departmentController.text.trim(),
-      designation: _designationController.text.trim(),
-    );
-
-    _cancelEditing();
-    if (mounted) {
-      AppHelpers.showSuccess(context, 'Profile updated successfully!');
-    }
-  }
-
-  Future<void> _pickImage(ImageSource source) async {
-    try {
-      final XFile? pickedFile = await _imagePicker.pickImage(
-        source: source,
-        maxWidth: 500,
-        maxHeight: 500,
-        imageQuality: 80,
+  Widget _buildAvatarImage(AuthUser? user) {
+    final avatarUrl = user?.avatarUrl?.trim();
+    if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      final fullUrl = avatarUrl.startsWith('http')
+          ? avatarUrl
+          : '${ApiService().baseUrl.replaceAll(RegExp(r'/api/?$'), '').replaceAll(RegExp(r'/+$'), '')}/${avatarUrl.replaceAll(RegExp(r'^/+'), '')}';
+      return Image.network(
+        fullUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _profileImageBase64 != null && _profileImageBase64!.isNotEmpty
+            ? Image.memory(
+                _base64ToBytes(_profileImageBase64!),
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _buildAvatarPlaceholder(user),
+              )
+            : _buildAvatarPlaceholder(user),
       );
-
-      if (pickedFile != null) {
-        final File imageFile = File(pickedFile.path);
-        final bytes = await imageFile.readAsBytes();
-        final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-
-        final auth = context.read<AuthProvider>();
-        await auth.updateProfileImage(base64Image);
-
-        if (mounted) {
-          setState(() {
-            _profileImageBase64 = base64Image;
-          });
-          AppHelpers.showSuccess(context, 'Profile photo updated!');
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        AppHelpers.showError(context, 'Failed to pick image');
-      }
     }
-  }
-
-  void _showImagePickerOptions() {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(16.r),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Change Profile Photo',
-                style: GoogleFonts.poppins(
-                  fontSize: 16.sp,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              SizedBox(height: 16.h),
-              Row(
-                children: [
-                  Expanded(
-                    child: _imageOption(
-                      icon: Icons.camera_alt,
-                      label: 'Camera',
-                      onTap: () {
-                        Navigator.pop(context);
-                        _pickImage(ImageSource.camera);
-                      },
-                    ),
-                  ),
-                  SizedBox(width: 12.w),
-                  Expanded(
-                    child: _imageOption(
-                      icon: Icons.photo_library,
-                      label: 'Gallery',
-                      onTap: () {
-                        Navigator.pop(context);
-                        _pickImage(ImageSource.gallery);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 16.h),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _imageOption({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    Color color = AppColors.primary,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: EdgeInsets.symmetric(vertical: 12.h),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 24.sp),
-            SizedBox(height: 6.h),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 11.sp,
-                fontWeight: FontWeight.w500,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    if (_profileImageBase64 != null && _profileImageBase64!.isNotEmpty) {
+      return Image.memory(
+        _base64ToBytes(_profileImageBase64!),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _buildAvatarPlaceholder(user),
+      );
+    }
+    return _buildAvatarPlaceholder(user);
   }
 
   // FIXED: Helper to convert base64 string to Uint8List
@@ -235,7 +120,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final user = auth.currentUser;
-    final isAdmin = auth.isAdmin;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -251,64 +135,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                if (_isEditing)
-                  _buildEditForm()
-                else
-                  _buildInfoCard(user),
+                _buildInfoCard(user),
                 SizedBox(height: 20.h),
 
                  _sectionLabel('Account'),
                 SizedBox(height: 8.h),
                 _buildSettingsCard([
+                  _SettingItem(
+                    Icons.home_outlined,
+                    'Address',
+                    AppColors.primary,
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => AddressScreen(user: user)),
+                    ),
+                  ),
+                  _SettingItem(
+                    Icons.person_outline_rounded,
+                    'Edit Profile',
+                    AppColors.secondary,
+                    () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                    ),
+                  ),
                   _SettingItem(Icons.account_balance_wallet_outlined, 'Leave Balance', AppColors.success, () {
                     Navigator.pushNamed(context, '/leave-balance');
                   }),
-                  if (!isAdmin) ...[
-                    _SettingItem(Icons.event_note_outlined, 'Leave Management', AppColors.primary, () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const EmployeeLeaveScreen()),
-                      );
-                    }),
-                    _SettingItem(Icons.phonelink_setup_rounded, 'Request Device Change', AppColors.warning, () {
-                      _showDeviceChangeDialog(context, user);
-                    }),
-                  ],
+                  _SettingItem(Icons.event_note_outlined, 'Leave Management', AppColors.primary, () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const EmployeeLeaveScreen()),
+                    );
+                  }),
+                  _SettingItem(Icons.phonelink_setup_rounded, 'Request Device Change', AppColors.warning, () {
+                    _showDeviceChangeDialog(context, user);
+                  }),
                 ]),
                 SizedBox(height: 20.h),
-
-                if (isAdmin) ...[
-                  _sectionLabel('Administration', isAdminSection: true),
-                  SizedBox(height: 8.h),
-                  _buildSettingsCard([
-                    _SettingItem(
-                      Icons.business,
-                      'Company Settings',
-                      AppColors.primary,
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const OfficeSettingsScreen()),
-                      ),
-                    ),
-                    _SettingItem(
-                      Icons.location_on_outlined,
-                      'Location Settings',
-                      AppColors.success,
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LocationSettingsScreen()),
-                      ),
-                    ),
-                  ]),
-                  SizedBox(height: 20.h),
-                ],
 
                 _buildLogoutButton(context, auth),
                 SizedBox(height: 10.h),
 
                 Center(
                   child: Text(
-                    'HRMIS v1.0.0',
+                    'AIDC HRMIS ${_appVersion.isNotEmpty ? _appVersion : 'v2.0.1'}',
                     style: TextStyle(
                       fontSize: 11.sp,
                       color: AppColors.textTertiary,
@@ -324,163 +195,87 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildEditForm() {
-    return Container(
-      padding: EdgeInsets.all(AppDimensions.paddingMD.r),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppDimensions.radiusLG.r),
-        boxShadow: [
-          BoxShadow(color: AppColors.shadowColor, blurRadius: 12, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Edit Profile',
-            style: GoogleFonts.poppins(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          SizedBox(height: 16.h),
-
-          TextField(
-            controller: _nameController,
-            decoration: InputDecoration(
-              labelText: 'Full Name',
-              prefixIcon: Icon(Icons.person_outline, size: 20.sp),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
-            ),
-            style: TextStyle(fontSize: 14.sp),
-          ),
-          SizedBox(height: 12.h),
-
-          TextField(
-            controller: _emailController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: InputDecoration(
-              labelText: 'Email Address',
-              prefixIcon: Icon(Icons.email_outlined, size: 20.sp),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
-            ),
-            style: TextStyle(fontSize: 14.sp),
-          ),
-          SizedBox(height: 12.h),
-
-          TextField(
-            controller: _departmentController,
-            decoration: InputDecoration(
-              labelText: 'Department',
-              prefixIcon: Icon(Icons.business_outlined, size: 20.sp),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
-            ),
-            style: TextStyle(fontSize: 14.sp),
-          ),
-          SizedBox(height: 12.h),
-
-          TextField(
-            controller: _designationController,
-            decoration: InputDecoration(
-              labelText: 'Designation',
-              prefixIcon: Icon(Icons.work_outline, size: 20.sp),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12.r)),
-            ),
-            style: TextStyle(fontSize: 14.sp),
-          ),
-          SizedBox(height: 20.h),
-
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _cancelEditing,
-                  style: OutlinedButton.styleFrom(
-                    padding: EdgeInsets.symmetric(vertical: 12.h),
-                    side: BorderSide(color: AppColors.border),
-                  ),
-                  child: Text('Cancel'),
-                ),
-              ),
-              SizedBox(width: 12.w),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _saveProfile,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    padding: EdgeInsets.symmetric(vertical: 12.h),
-                  ),
-                  child: Text('Save Changes'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildHeader(BuildContext context, AuthUser? user) {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 20.h,
-        bottom: 32.h,
-        left: AppDimensions.paddingMD.w,
-        right: AppDimensions.paddingMD.w,
-      ),
-      decoration: const BoxDecoration(
-        gradient: AppColors.headerGradient,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
-      ),
-      child: Column(
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+      child: Stack(
         children: [
+          // Background Building Image
+          Positioned.fill(
+            child: Image.asset(
+              'assets/images/aidc_building.jpg',
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
+            ),
+          ),
+          // Deep Dark Blue Gradient Overlay (High opacity for excellent profile and text visibility)
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF0F172A).withValues(alpha: 0.88),
+                    const Color(0xFF1E3A8A).withValues(alpha: 0.92),
+                    const Color(0xFF0B192C).withValues(alpha: 0.96),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Header Content
           Container(
-            width: 88.w,
-            height: 88.h,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: AppColors.primaryGradient,
-              border: Border.all(color: Colors.white.withOpacity(0.5), width: 3),
+            width: double.infinity,
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top + 20.h,
+              bottom: 32.h,
+              left: AppDimensions.paddingMD.w,
+              right: AppDimensions.paddingMD.w,
             ),
-            child: ClipOval(
-              child: _profileImageBase64 != null && _profileImageBase64!.isNotEmpty
-                  ? Image.memory(
-                      _base64ToBytes(_profileImageBase64!),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _buildAvatarPlaceholder(user),
-                    )
-                  : _buildAvatarPlaceholder(user),
-            ),
-          ),
-          SizedBox(height: 16.h),
-          Text(
-            user?.name ?? 'User Name',
-            style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w700, color: Colors.white),
-          ),
-          SizedBox(height: 6.h),
-          Text(
-            user?.designation.isNotEmpty == true ? user!.designation : (user?.email ?? 'user@company.com'),
-            style: TextStyle(fontSize: 13.sp, color: Colors.white.withOpacity(0.85)),
-          ),
-          SizedBox(height: 8.h),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 5.h),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(20.r),
-              border: Border.all(color: Colors.white.withOpacity(0.3)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Column(
               children: [
-                Icon(AppHelpers.getDepartmentIcon(user?.department ?? ''), size: 14.sp, color: Colors.white70),
-                SizedBox(width: 6.w),
+                Container(
+                  width: 88.w,
+                  height: 88.h,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: AppColors.primaryGradient,
+                    border: Border.all(color: Colors.white.withOpacity(0.5), width: 3),
+                  ),
+                  child: ClipOval(
+                    child: _buildAvatarImage(user),
+                  ),
+                ),
+                SizedBox(height: 16.h),
                 Text(
-                  user?.department.isNotEmpty == true ? user!.department : 'General Department',
-                  style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w500, color: Colors.white),
+                  user?.name ?? 'User Name',
+                  style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w700, color: Colors.white),
+                ),
+                SizedBox(height: 6.h),
+                Text(
+                  user?.designation.isNotEmpty == true ? user!.designation : (user?.email ?? 'user@company.com'),
+                  style: TextStyle(fontSize: 13.sp, color: Colors.white.withOpacity(0.85)),
+                ),
+                SizedBox(height: 8.h),
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 5.h),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20.r),
+                    border: Border.all(color: Colors.white.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(AppHelpers.getDepartmentIcon(user?.department ?? ''), size: 14.sp, color: Colors.white70),
+                      SizedBox(width: 6.w),
+                      Text(
+                        user?.department.isNotEmpty == true ? user!.department : 'General Department',
+                        style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w500, color: Colors.white),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -503,7 +298,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildInfoCard(AuthUser? user) {
-    final employeeId = user?.empCode.isNotEmpty == true ? user!.empCode : (user?.id ?? 'EMP001');
+    final employeeId = user?.empCode.isNotEmpty == true ? user!.empCode : (user?.id ?? 'N/A');
     
     String joiningDate = 'N/A';
     if (user?.joiningDate != null && user!.joiningDate!.isNotEmpty) {
@@ -536,17 +331,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
-  }
-
-  String _getJoiningDate(String? employeeId) {
-    switch (employeeId) {
-      case 'ADMIN001': return 'Jan 2023';
-      case 'EMP001': return 'Jan 2023';
-      case 'EMP002': return 'Mar 2023';
-      case 'EMP003': return 'Jun 2023';
-      case 'EMP004': return 'Sep 2023';
-      default: return 'Jan 2024';
-    }
   }
 
   Widget _sectionLabel(String label, {bool isAdminSection = false}) {
@@ -723,281 +507,122 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showDeviceChangeDialog(BuildContext context, AuthUser? user) {
-    final reasonController = TextEditingController();
-    bool isSubmitting = false;
+    final empCode = (user?.empCode.isNotEmpty == true) ? user!.empCode : (user?.id ?? 'N/A');
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.white,
-          contentPadding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 16.h),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header Icon & Title
-                Row(
-                  children: [
-                    Container(
-                      padding: EdgeInsets.all(12.r),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            AppColors.warning.withOpacity(0.15),
-                            AppColors.warning.withOpacity(0.05),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16.r),
-                        border: Border.all(color: AppColors.warning.withOpacity(0.3)),
-                      ),
-                      child: Icon(Icons.phonelink_setup_rounded, color: AppColors.warning, size: 28.sp),
-                    ),
-                    SizedBox(width: 14.w),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Request Device Change',
-                            style: GoogleFonts.poppins(
-                              fontSize: 17.sp,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          SizedBox(height: 2.h),
-                          Text(
-                            'Notify Admin to unbind your phone',
-                            style: GoogleFonts.poppins(
-                              fontSize: 11.sp,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 20.h),
-
-                // Currently Registered Device Details Card
-                Text(
-                  'Currently Registered Device',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                SizedBox(height: 8.h),
-
-                FutureBuilder<DeviceDetails>(
-                  future: DeviceInfoService.getDeviceDetails(),
-                  builder: (context, snapshot) {
-                    final currentHardwareName = snapshot.data?.deviceName;
-                    final displayDeviceName = (user?.deviceName != null && user!.deviceName!.isNotEmpty)
-                        ? user.deviceName!
-                        : (currentHardwareName ?? 'Primary Mobile Device');
-
-                    return Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(12.r),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withOpacity(0.04),
-                        borderRadius: BorderRadius.circular(16.r),
-                        border: Border.all(color: AppColors.primary.withOpacity(0.15)),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: EdgeInsets.all(10.r),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.1),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              displayDeviceName.toLowerCase().contains('iphone') || displayDeviceName.toLowerCase().contains('ios')
-                                  ? Icons.phone_iphone_rounded
-                                  : Icons.phone_android_rounded,
-                              size: 22.sp,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          SizedBox(width: 12.w),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  displayDeviceName,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 14.sp,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                SizedBox(height: 2.h),
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 6.w,
-                                      height: 6.h,
-                                      decoration: const BoxDecoration(
-                                        color: AppColors.success,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    SizedBox(width: 6.w),
-                                    Text(
-                                      user?.registeredDeviceId != null
-                                          ? 'Active & Bound'
-                                          : 'Currently Active Device',
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 11.sp,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.success,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-                SizedBox(height: 18.h),
-
-                // Reason Input Field
-                Text(
-                  'Reason for Device Change',
-                  style: GoogleFonts.poppins(
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                SizedBox(height: 8.h),
-
-                TextField(
-                  controller: reasonController,
-                  maxLines: 3,
-                  style: GoogleFonts.poppins(fontSize: 13.sp, color: AppColors.textPrimary),
-                  decoration: InputDecoration(
-                    hintText: 'e.g., Purchased new smartphone, old device broken/lost...',
-                    hintStyle: GoogleFonts.poppins(fontSize: 12.sp, color: AppColors.textTertiary),
-                    filled: true,
-                    fillColor: AppColors.background,
-                    contentPadding: EdgeInsets.all(14.r),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14.r),
-                      borderSide: BorderSide(color: AppColors.border),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14.r),
-                      borderSide: BorderSide(color: AppColors.border),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14.r),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 22.h),
-
-                // Action Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
-                        style: TextButton.styleFrom(
-                          padding: EdgeInsets.symmetric(vertical: 12.h),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12.r),
-                            side: BorderSide(color: AppColors.border),
-                          ),
-                        ),
-                        child: Text(
-                          'Cancel',
-                          style: GoogleFonts.poppins(
-                            fontSize: 13.sp,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 12.w),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: isSubmitting
-                            ? null
-                            : () async {
-                                final reason = reasonController.text.trim();
-                                if (reason.isEmpty) {
-                                  AppHelpers.showError(ctx, 'Please enter a reason for device change');
-                                  return;
-                                }
-                                setDialogState(() {
-                                  isSubmitting = true;
-                                });
-                                try {
-                                  await ApiService().requestDeviceChange(reason: reason);
-                                  if (context.mounted) {
-                                    Navigator.pop(ctx);
-                                    AppHelpers.showSuccess(
-                                      context,
-                                      'Device change request sent to Admin successfully!',
-                                    );
-                                  }
-                                } catch (e) {
-                                  setDialogState(() {
-                                    isSubmitting = false;
-                                  });
-                                  if (ctx.mounted) {
-                                    AppHelpers.showError(ctx, e.toString());
-                                  }
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 2,
-                          shadowColor: AppColors.primary.withOpacity(0.3),
-                          padding: EdgeInsets.symmetric(vertical: 12.h),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
-                        ),
-                        child: isSubmitting
-                            ? SizedBox(
-                                width: 18.w,
-                                height: 18.h,
-                                child: const CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : Text(
-                                'Submit Request',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 13.sp,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        contentPadding: EdgeInsets.fromLTRB(24.w, 24.h, 24.w, 20.h),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Icon
+            Container(
+              padding: EdgeInsets.all(16.r),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.admin_panel_settings_rounded,
+                color: AppColors.warning,
+                size: 36.sp,
+              ),
             ),
-          ),
+            SizedBox(height: 16.h),
+
+            // Title
+            Text(
+              'Contact Administrator',
+              style: GoogleFonts.poppins(
+                fontSize: 18.sp,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8.h),
+
+            // Message
+            Text(
+              'For security and attendance verification, device registration cannot be changed directly from the mobile app.',
+              style: GoogleFonts.poppins(
+                fontSize: 13.sp,
+                color: AppColors.textSecondary,
+                height: 1.45,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16.h),
+
+            // Info Box
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(14.r),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(14.r),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.badge_outlined, size: 16.sp, color: AppColors.primary),
+                      SizedBox(width: 6.w),
+                      Text(
+                        'Employee ID: $empCode',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 6.h),
+                  Text(
+                    'Please contact your HR / System Administrator with your Employee ID to unbind or change your registered device.',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11.5.sp,
+                      color: AppColors.textSecondary,
+                      height: 1.35,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(height: 20.h),
+
+            // Action Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: EdgeInsets.symmetric(vertical: 13.h),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14.r),
+                  ),
+                ),
+                child: Text(
+                  'Understood',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -128,7 +128,93 @@ class AppHelpers {
     );
   }
 
+  // ─── Dialog for System / Database / Admin issues ──────────────
+  static void showAdminContactDialog(
+    BuildContext context, {
+    String title = 'System Notice',
+    String message = 'A required server configuration or database record is missing. Please contact your system administrator for assistance.',
+  }) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.admin_panel_settings_rounded,
+                color: Color(0xFFDC2626),
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1F2937),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(
+            fontSize: 13.5,
+            color: Color(0xFF4B5563),
+            height: 1.45,
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+
   static void showError(BuildContext context, String message) {
+    final lower = message.toLowerCase();
+    final bool isAdminIssue = lower.contains('contact your system administrator') ||
+        lower.contains('contact administrator') ||
+        lower.contains('sqlstate') ||
+        lower.contains('base table or view not found') ||
+        lower.contains('database') ||
+        lower.contains('server error') ||
+        lower.contains('queryexception') ||
+        lower.contains('pdoexception') ||
+        lower.contains('server or database component is missing');
+
+    if (isAdminIssue) {
+      showAdminContactDialog(
+        context,
+        title: 'Contact Administrator',
+        message: 'A required server configuration or database component is missing. Please contact your system administrator for assistance.',
+      );
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(children: [

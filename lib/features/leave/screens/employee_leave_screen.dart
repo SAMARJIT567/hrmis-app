@@ -155,16 +155,6 @@ class EmployeeLeaveProvider extends ChangeNotifier {
     }).toList();
   }
 
-  int _calculateUsed(String type) {
-    double count = 0;
-    for (var r in _requests) {
-      if (r.leaveType == type && (r.status == 'approved' || r.status == 'closed')) {
-        count += r.days;
-      }
-    }
-    return count.toInt();
-  }
-
   int get pendingCount => _requests.where((r) => r.status == 'pending').length;
   int get approvedCount => _requests.where((r) => r.status == 'approved').length;
   int get rejectedCount => _requests.where((r) => r.status == 'rejected').length;
@@ -191,7 +181,11 @@ class EmployeeLeaveProvider extends ChangeNotifier {
     if (user == null) return;
     
     _requests = globalProvider.allRequests
-        .where((r) => r.employeeId == user!.id)
+        .where((r) =>
+            r.employeeId == user!.id ||
+            (user!.empCode.isNotEmpty && r.employeeId == user!.empCode) ||
+            r.employeeId.isEmpty ||
+            user!.id.isEmpty)
         .map((r) => EmployeeLeaveRequest(
               id: r.id,
               leaveType: r.leaveType,
@@ -228,6 +222,9 @@ class EmployeeLeaveProvider extends ChangeNotifier {
     return count.toDouble();
   }
 
+  String? _lastErrorMessage;
+  String? get lastErrorMessage => _lastErrorMessage;
+
   Future<bool> applyLeave({
     required String leaveType, 
     required DateTime fromDate, 
@@ -237,6 +234,7 @@ class EmployeeLeaveProvider extends ChangeNotifier {
     required LeaveProvider globalProvider,
   }) async {
     _isSubmitting = true;
+    _lastErrorMessage = null;
     notifyListeners();
 
     final days = customDays ?? (toDate.difference(fromDate).inDays + 1).toDouble();
@@ -253,6 +251,8 @@ class EmployeeLeaveProvider extends ChangeNotifier {
 
     if (success) {
       syncWithGlobal(globalProvider);
+    } else {
+      _lastErrorMessage = globalProvider.lastErrorMessage;
     }
     
     _isSubmitting = false;
@@ -274,8 +274,8 @@ class EmployeeLeaveProvider extends ChangeNotifier {
     final expiryDate = dutyDate.add(const Duration(days: 30));
     final newCredit = CompOffCredit(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      employeeId: user?.id ?? 'EMP001',
-      employeeName: user?.name ?? 'Rahul Sharma',
+      employeeId: user?.id ?? '',
+      employeeName: user?.name ?? 'Employee',
       dutyDate: DateFormat('dd MMM yyyy').format(dutyDate),
       expiryDate: DateFormat('dd MMM yyyy').format(expiryDate),
       reason: reason,
@@ -320,7 +320,7 @@ class EmployeeLeaveScreen extends StatefulWidget {
   State<EmployeeLeaveScreen> createState() => _EmployeeLeaveScreenState();
 }
 
-class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
+class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> with WidgetsBindingObserver {
   String _filterType = 'monthly'; // 'weekly' | 'monthly' | 'yearly'
   late WeekRange _selectedWeek;
   late int _selectedMonth;
@@ -331,10 +331,12 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
   final List<int> _monthsList = List.generate(12, (index) => index + 1);
 
   int _activeTab = 0; // 0 for Leaves, 1 for Attendance
+  int _attendanceVisibleCount = 3;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final now = DateTime.now();
     _weeksList = _getRecentWeeks();
     _selectedWeek = _weeksList.first;
@@ -345,6 +347,37 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
     for (int y = now.year; y >= now.year - 2; y--) {
       _yearsList.add(y);
     }
+
+    // Auto-refresh fresh leaves and logs from backend immediately on screen load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshData();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Auto-refresh when user switches back to app from browser/admin panel
+      _refreshData();
+    }
+  }
+
+  Future<void> _refreshData() async {
+    if (!mounted) return;
+    try {
+      final leaveProv = Provider.of<LeaveProvider>(context, listen: false);
+      final attProv = Provider.of<EmployeeAttendanceProvider>(context, listen: false);
+      await Future.wait([
+        leaveProv.loadLeaves(),
+        attProv.loadMyAttendance(),
+      ]);
+    } catch (_) {}
   }
 
   List<WeekRange> _getRecentWeeks() {
@@ -387,6 +420,13 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
         return null;
       }
     }
+  }
+
+  String _formatDisplayDate(String d) {
+    if (d.isEmpty) return 'N/A';
+    final dt = _parseAnyDate(d);
+    if (dt != null) return DateFormat('dd MMM yyyy').format(dt);
+    return d;
   }
 
   Map<String, DateTime> _getCurrentFilterRange() {
@@ -433,7 +473,6 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
-    final leaveProvider = Provider.of<LeaveProvider>(context);
 
     return MultiProvider(
       providers: [
@@ -456,18 +495,23 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
               children: [
                 _buildHeader(context),
                 Expanded(
-                  child: ListView(
-                    physics: const BouncingScrollPhysics(),
-                    padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 10.r),
-                    children: [
-                      _buildLeaveBalanceCard(),
-                      _buildActionButtons(context),
-                      _buildFilterSection(context),
-                      _buildPeriodInsightsCard(employeeLeaveProv, attendanceProv),
-                      _buildTabSelector(),
-                      _buildTabContent(context, employeeLeaveProv, attendanceProv),
-                      SizedBox(height: 100.h),
-                    ],
+                  child: RefreshIndicator(
+                    onRefresh: _refreshData,
+                    color: AppColors.primary,
+                    backgroundColor: Colors.white,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 10.r),
+                      children: [
+                        _buildLeaveBalanceCard(),
+                        _buildActionButtons(context),
+                        _buildFilterSection(context),
+                        _buildPeriodInsightsCard(employeeLeaveProv, attendanceProv),
+                        _buildTabSelector(),
+                        _buildTabContent(context, employeeLeaveProv, attendanceProv),
+                        SizedBox(height: 100.h),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -523,7 +567,21 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
               ],
             ),
           ),
-          _headerIconBtn(Icons.help_outline_rounded),
+          GestureDetector(
+            onTap: () async {
+              await _refreshData();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Records synchronized with server', style: GoogleFonts.poppins(fontSize: 12.sp)),
+                    duration: const Duration(seconds: 1),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: _headerIconBtn(Icons.refresh_rounded),
+          ),
         ],
       ),
     );
@@ -644,6 +702,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
         context: context, 
         isScrollControlled: true, 
         backgroundColor: Colors.transparent, 
+        sheetAnimationStyle: AnimationStyle.noAnimation,
         builder: (ctx) => ChangeNotifierProvider.value(
           value: provider, 
           child: const LeaveApplySheet()
@@ -713,6 +772,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
         onTap: () {
           setState(() {
             _filterType = type;
+            _attendanceVisibleCount = 3;
           });
         },
         child: Container(
@@ -766,6 +826,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
               if (val != null) {
                 setState(() {
                   _selectedWeek = val;
+                  _attendanceVisibleCount = 3;
                 });
               }
             },
@@ -803,6 +864,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
                     if (val != null) {
                       setState(() {
                         _selectedMonth = val;
+                        _attendanceVisibleCount = 3;
                       });
                     }
                   },
@@ -837,6 +899,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
                     if (val != null) {
                       setState(() {
                         _selectedYear = val;
+                        _attendanceVisibleCount = 3;
                       });
                     }
                   },
@@ -873,6 +936,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
               if (val != null) {
                 setState(() {
                   _selectedYear = val;
+                  _attendanceVisibleCount = 3;
                 });
               }
             },
@@ -892,25 +956,37 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
     final filteredCompOffs = leaveProv.compOffCredits.where((c) => _isDutyReportInPeriod(c, start, end)).toList();
 
     int pendingLeaves = filteredRequests.where((r) => r.status == 'pending').length;
-    int approvedLeaves = filteredRequests.where((r) => r.status == 'approved' || r.status == 'closed').length;
-    int rejectedLeaves = filteredRequests.where((r) => r.status == 'rejected').length;
     double totalLeaveDays = filteredRequests.where((r) => r.status == 'approved' || r.status == 'closed').fold(0.0, (sum, r) => sum + r.days);
 
     // 2. Attendance records in period
     final filteredAttendance = attendanceProv.records.where((r) => _isAttendanceInPeriod(r, start, end)).toList();
     
-    int presentDays = filteredAttendance.where((r) {
-      final s = r.status.toLowerCase();
-      return s == 'present' || s == 'late' || s == 'late in' || 
-             s == 'half day' || s == 'tour' || s == 'early out';
-    }).length;
-    
-    int lateDays = filteredAttendance.where((r) {
-      final s = r.status.toLowerCase();
-      return s == 'late' || s == 'late in';
-    }).length;
+    // Deduplicate by unique calendar date so multiple punches in a single day count as 1 day
+    final Set<String> uniquePresentDates = {};
+    final Set<String> uniqueLateDates = {};
+    final Set<String> uniqueAttendanceDates = {};
 
-    // Calculate absent count precisely
+    for (var r in filteredAttendance) {
+      final rDate = _parseAnyDate(r.date);
+      if (rDate == null) continue;
+      final dateKey = DateFormat('yyyy-MM-dd').format(rDate);
+      final s = r.status.toLowerCase().trim();
+
+      uniqueAttendanceDates.add(dateKey);
+
+      if (s == 'present' || s == 'late' || s == 'late in' || 
+          s == 'half day' || s == 'tour' || s == 'early out') {
+        uniquePresentDates.add(dateKey);
+      }
+      if (s == 'late' || s == 'late in') {
+        uniqueLateDates.add(dateKey);
+      }
+    }
+
+    int presentDays = uniquePresentDates.length;
+    int lateDays = uniqueLateDates.length;
+
+    // Calculate absent count precisely using unique calendar days
     int absentDays = 0;
     final now = DateTime.now();
     final todayNoTime = DateTime(now.year, now.month, now.day);
@@ -929,16 +1005,20 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
       final isHoliday = attendanceProv.holidays.contains(dateStr);
       
       if (!isWeekend && !isHoliday) {
-        final record = attendanceProv.records.firstWhere(
-          (r) {
-            final rDate = _parseAnyDate(r.date);
-            if (rDate == null) return false;
-            return DateTime(rDate.year, rDate.month, rDate.day).isAtSameMomentAs(d);
-          },
-          orElse: () => const EmployeeAttendanceRecord(id: '', date: '', status: 'Absent'),
-        );
-        
-        if (record.id.isEmpty || record.status.toLowerCase() == 'absent') {
+        final bool isPresentOrPunched = uniquePresentDates.contains(dateStr) || uniqueAttendanceDates.contains(dateStr);
+        final bool isOnApprovedLeave = filteredRequests.any((req) {
+          if (req.status != 'approved' && req.status != 'closed') return false;
+          final f = _parseAnyDate(req.fromDate);
+          final t = _parseAnyDate(req.toDate);
+          if (f == null || t == null) return false;
+          final dDay = DateTime(d.year, d.month, d.day);
+          final fDay = DateTime(f.year, f.month, f.day);
+          final tDay = DateTime(t.year, t.month, t.day);
+          return (dDay.isAtSameMomentAs(fDay) || dDay.isAfter(fDay)) &&
+                 (dDay.isAtSameMomentAs(tDay) || dDay.isBefore(tDay));
+        });
+
+        if (!isPresentOrPunched && !isOnApprovedLeave) {
           absentDays++;
         }
       }
@@ -1084,6 +1164,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
         onTap: () {
           setState(() {
             _activeTab = index;
+            _attendanceVisibleCount = 3;
           });
         },
         child: Container(
@@ -1192,91 +1273,139 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
       );
     }
 
-    return Column(
-      children: filteredAttendance.map((record) {
-        Color statusColor = AppColors.error;
-        final s = record.status.toLowerCase();
-        if (s == 'present') {
-          statusColor = AppColors.success;
-        } else if (s == 'late' || s == 'late in') {
-          statusColor = AppColors.warning;
-        } else if (s == 'leave') {
-          statusColor = Colors.purple;
-        } else if (s == 'tour') {
-          statusColor = Colors.indigo;
-        } else if (s == 'half day') {
-          statusColor = Colors.blue;
-        }
+    // Pagination: display up to _attendanceVisibleCount
+    final displayedAttendance = filteredAttendance.take(_attendanceVisibleCount).toList();
+    final bool hasMore = filteredAttendance.length > _attendanceVisibleCount;
 
-        return Container(
-          margin: EdgeInsets.only(bottom: 8.h),
-          padding: EdgeInsets.all(14.r),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12.r),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 4.w,
-                height: 40.h,
-                decoration: BoxDecoration(color: statusColor, borderRadius: BorderRadius.circular(2.r)),
-              ),
-              SizedBox(width: 12.w),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      children: [
+        ...displayedAttendance.map((record) {
+          Color statusColor = AppColors.error;
+          final s = record.status.toLowerCase();
+          if (s == 'present') {
+            statusColor = AppColors.success;
+          } else if (s == 'late' || s == 'late in') {
+            statusColor = AppColors.warning;
+          } else if (s == 'leave') {
+            statusColor = Colors.purple;
+          } else if (s == 'tour') {
+            statusColor = Colors.indigo;
+          } else if (s == 'half day') {
+            statusColor = Colors.blue;
+          }
+
+          return Container(
+            margin: EdgeInsets.only(bottom: 8.h),
+            padding: EdgeInsets.all(14.r),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12.r),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 4.w,
+                  height: 40.h,
+                  decoration: BoxDecoration(color: statusColor, borderRadius: BorderRadius.circular(2.r)),
+                ),
+                SizedBox(width: 12.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        record.date,
+                        style: GoogleFonts.poppins(fontSize: 13.sp, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                      ),
+                      if (record.checkIn != null)
+                        Text(
+                          'In: ${record.checkIn}  |  Out: ${record.checkOut ?? "Pending"}',
+                          style: GoogleFonts.poppins(fontSize: 11.sp, color: AppColors.textTertiary),
+                        )
+                      else
+                        Text(
+                          'No punches logged',
+                          style: GoogleFonts.poppins(fontSize: 11.sp, color: AppColors.textHint, fontStyle: FontStyle.italic),
+                        ),
+                      if (record.lateDuration != null && record.lateDuration!.isNotEmpty)
+                        Padding(
+                          padding: EdgeInsets.only(top: 2.h),
+                          child: Text(
+                            '⏰ Late by: ${record.lateDuration}',
+                            style: GoogleFonts.poppins(fontSize: 10.sp, color: AppColors.warning),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                      decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12.r)),
+                      child: Text(
+                        record.status,
+                        style: GoogleFonts.poppins(fontSize: 10.sp, fontWeight: FontWeight.w600, color: statusColor),
+                      ),
+                    ),
+                    if (record.workHours != null) ...[
+                      SizedBox(height: 4.h),
+                      Text(
+                        record.workHours!,
+                        style: GoogleFonts.poppins(fontSize: 10.sp, color: AppColors.textTertiary),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          );
+        }),
+
+        if (hasMore) ...[
+          SizedBox(height: 4.h),
+          Center(
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _attendanceVisibleCount += 3;
+                });
+              },
+              borderRadius: BorderRadius.circular(20.r),
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 7.h),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.07),
+                  borderRadius: BorderRadius.circular(20.r),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      record.date,
-                      style: GoogleFonts.poppins(fontSize: 13.sp, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                      'View More',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11.5.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
                     ),
-                    if (record.checkIn != null)
-                      Text(
-                        'In: ${record.checkIn}  |  Out: ${record.checkOut ?? "Pending"}',
-                        style: GoogleFonts.poppins(fontSize: 11.sp, color: AppColors.textTertiary),
-                      )
-                    else
-                      Text(
-                        'No punches logged',
-                        style: GoogleFonts.poppins(fontSize: 11.sp, color: AppColors.textHint, fontStyle: FontStyle.italic),
-                      ),
-                    if (record.lateDuration != null && record.lateDuration!.isNotEmpty)
-                      Padding(
-                        padding: EdgeInsets.only(top: 2.h),
-                        child: Text(
-                          '⏰ Late by: ${record.lateDuration}',
-                          style: GoogleFonts.poppins(fontSize: 10.sp, color: AppColors.warning),
-                        ),
-                      ),
+                    SizedBox(width: 4.w),
+                    Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 16.sp,
+                      color: AppColors.primary,
+                    ),
                   ],
                 ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
-                    decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12.r)),
-                    child: Text(
-                      record.status,
-                      style: GoogleFonts.poppins(fontSize: 10.sp, fontWeight: FontWeight.w600, color: statusColor),
-                    ),
-                  ),
-                  if (record.workHours != null) ...[
-                    SizedBox(height: 4.h),
-                    Text(
-                      record.workHours!,
-                      style: GoogleFonts.poppins(fontSize: 10.sp, color: AppColors.textTertiary),
-                    ),
-                  ],
-                ],
-              ),
-            ],
+            ),
           ),
-        );
-      }).toList(),
+          SizedBox(height: 12.h),
+        ],
+      ],
     );
   }
 
@@ -1368,7 +1497,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
             ],
           ),
           SizedBox(height: 6.h),
-          Text('${request.fromDate} - ${request.toDate} (${request.days % 1 == 0 ? request.days.toInt() : request.days} day${request.days > 1 ? 's' : ''})', style: GoogleFonts.poppins(fontSize: 12.sp, color: AppColors.textSecondary)),
+          Text('${_formatDisplayDate(request.fromDate)} - ${_formatDisplayDate(request.toDate)} (${request.days % 1 == 0 ? request.days.toInt() : request.days} day${request.days > 1 ? 's' : ''})', style: GoogleFonts.poppins(fontSize: 12.sp, color: AppColors.textSecondary)),
           if (request.reason.isNotEmpty) Padding(padding: EdgeInsets.only(top: 4.h), child: Text(request.reason, style: GoogleFonts.poppins(fontSize: 11.sp, color: AppColors.textTertiary), maxLines: 1, overflow: TextOverflow.ellipsis)),
           SizedBox(height: 10.h),
           Row(
@@ -1377,7 +1506,13 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
               Text('Applied on: ${request.appliedOn}', style: GoogleFonts.poppins(fontSize: 9.sp, color: AppColors.textHint)),
               if (needsJoiningReport)
                 ElevatedButton(
-                  onPressed: () => showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (ctx) => ChangeNotifierProvider.value(value: provider, child: JoiningReportSheet(request: request))),
+                  onPressed: () => showModalBottomSheet(
+                    context: context, 
+                    isScrollControlled: true, 
+                    backgroundColor: Colors.transparent, 
+                    sheetAnimationStyle: AnimationStyle.noAnimation,
+                    builder: (ctx) => ChangeNotifierProvider.value(value: provider, child: JoiningReportSheet(request: request)),
+                  ),
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.secondary, foregroundColor: Colors.white, padding: EdgeInsets.symmetric(horizontal: 12.w), minimumSize: Size(0, 26.h), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.r))),
                   child: Text('Submit Joining', style: GoogleFonts.poppins(fontSize: 9.sp, fontWeight: FontWeight.w600)),
                 ),
@@ -1393,6 +1528,7 @@ class _EmployeeLeaveScreenState extends State<EmployeeLeaveScreen> {
                   context: context,
                   isScrollControlled: true,
                   backgroundColor: Colors.transparent,
+                  sheetAnimationStyle: AnimationStyle.noAnimation,
                   builder: (ctx) => _EmployeeLeaveDetailsSheet(request: request),
                 ),
                 icon: Icon(Icons.remove_red_eye_outlined, size: 14.sp, color: AppColors.primary),
@@ -1602,9 +1738,9 @@ class _LeaveApplySheetState extends State<LeaveApplySheet> {
 
   @override
   Widget build(BuildContext context) {
-    final globalLeaveProvider = Provider.of<LeaveProvider>(context);
+    final globalLeaveProvider = Provider.of<LeaveProvider>(context, listen: false);
     final provider = Provider.of<EmployeeLeaveProvider>(context);
-    final authUser = Provider.of<AuthProvider>(context).currentUser;
+    final authUser = Provider.of<AuthProvider>(context, listen: false).currentUser;
     List<String> leaveTypes = globalLeaveProvider.policies.map((p) => p.title).toList();
     if (authUser?.gender != 'Female') leaveTypes.removeWhere((t) => t.contains('Maternity'));
     if (authUser?.gender != 'Male') leaveTypes.removeWhere((t) => t.contains('Paternity'));
@@ -1700,24 +1836,24 @@ class _LeaveApplySheetState extends State<LeaveApplySheet> {
     String rules = '';
     Color color = AppColors.primary;
     if (_selectedLeaveType == 'Casual Leave') {
-      rules = '• FREE DAYS: Sundays and 2nd/4th Saturdays are NOT counted.\n• HALF DAY: Counted as 0.5 Day (Approx. 4 Hours).\n• LIMIT: Max 5 days allowed in one go.\n• BACK-TO-BACK: Do not take EL/Medical leave just before or after CL.';
+      rules = '• FREE DAYS: Sundays and 2nd/4th Saturdays are EXCLUDED (Cannot apply solely for weekend/holiday).\n• DURATION: Minimum 0.5 Day (Half Day), Maximum 5 Days per application.\n• NO SANDWICH: Weekend days falling within leave are not deducted from your balance.\n• RESTRICTION: Cannot be taken immediately before or after regular/medical leaves.';
     } else if (_selectedLeaveType == 'Earned Leave') {
-      rules = '• TOTAL: 30 days added every year (15 in Jan, 15 in July).\n• HOLIDAYS: Sundays/Holidays during your leave ARE counted.\n• MAXIMUM: You can save up to 300 days total.\n• APPLY EARLY: Please apply 15 days before your leave starts.';
+      rules = '• SANDWICH RULE: Sundays and official holidays during your leave period ARE counted.\n• LIMIT: Maximum accumulation allowed is 300 days.\n• ADVANCE APPLICATION: Apply at least 15 days in advance.\n• ATTACHMENT: Supporting document/order mandatory as per Govt rule.';
       color = AppColors.success;
     } else if (_selectedLeaveType == 'Commuted Leave') {
-      rules = '• PAY: Full Salary during medical leave.\n• DURATION: 1 Day = 8 Hours (Deducts 2 HPL days).\n• CERTIFICATE: Medical Certificate mandatory from Day 1.\n• JOINING: Upload Fitness Certificate via "Submit Joining" button on History card.';
+      rules = '• NO BACKDATE: Backdated leave applications are not permitted.\n• CONVERSION: Full Salary during medical leave (Deducts 2 HPL days per 1 Commuted day).\n• CERTIFICATE: Medical Certificate is mandatory from Day 1.\n• JOINING: Fitness Certificate must be submitted upon joining.';
       color = AppColors.error;
     } else if (_selectedLeaveType == 'Half Pay Leave') {
-      rules = '• SALARY: You get only HALF Pay (50%) for these days.\n• DEDUCTION: 1 Day Leave = 1 Day minus from HPL account.\n• LIMIT: No max limit; depends on balance.\n• UPLOAD: No documents required for personal work.';
+      rules = '• NO BACKDATE: Backdated applications are not permitted.\n• SALARY: Half Pay (50% salary) for these days (1 Day leave = 1 HPL deduct).\n• RESTRICTION: Cannot be taken immediately before or after Casual Leave (CL).';
       color = AppColors.warning;
     } else if (_selectedLeaveType == 'Compensatory Leave') {
-      rules = '• EARNING: Earned by working on Public Holidays/Sundays.\n• EXPIRY: Must be used within 30 days of duty.\n• LIMIT: Maximum 2 days allowed at a time.\n• NO HALF DAY: Only full day leave is allowed.';
+      rules = '• EARNING: Earned by performing duty on authorized Holidays/Sundays.\n• EXPIRY: Must be utilized within 30 days of duty.\n• LIMIT: Maximum 2 days allowed at a time. Full days only (No half day).';
       color = AppColors.warning;
     } else if (_selectedLeaveType == 'Maternity Leave') {
-      rules = '• ELIGIBILITY: Female employees with < 2 children.\n• DURATION: 180 days (6 months) continuous block.\n• SALARY: Full Pay during leave period.\n• EXTENSION: Up to 60 days extra leave (EL/HPL) allowed.';
+      rules = '• ELIGIBILITY: Female employees only (< 2 surviving children).\n• DURATION: Exactly 180 continuous calendar days (Sandwich rule applies).\n• MANDATORY: Medical/Birth Certificate required. Backdated entry not permitted.';
       color = AppColors.secondary;
     } else if (_selectedLeaveType == 'Paternity Leave') {
-      rules = '• ELIGIBILITY: Male employees with < 2 children.\n• DURATION: 15 days continuous block (Full Pay).\n• AUTOMATIC: Leave dates are auto-calculated from Delivery Date.\n• UPLOAD: Birth Certificate mandatory.';
+      rules = '• ELIGIBILITY: Male employees with < 2 surviving children.\n• DURATION: 15 continuous calendar days (Full Pay).\n• MANDATORY: Valid Birth Certificate is required.';
       color = AppColors.accent;
     }
     if (rules.isEmpty) return const SizedBox.shrink();
@@ -1884,6 +2020,7 @@ class _LeaveApplySheetState extends State<LeaveApplySheet> {
               context: context, 
               isScrollControlled: true, 
               backgroundColor: Colors.transparent, 
+              sheetAnimationStyle: AnimationStyle.noAnimation,
               builder: (ctx) => ChangeNotifierProvider.value(
                 value: provider, 
                 child: const LogHolidayDutySheet()
@@ -1948,35 +2085,60 @@ class _LeaveApplySheetState extends State<LeaveApplySheet> {
           final days = _calculateCurrentDays(provider);
           final effectiveToDate = _isHalfDay ? _fromDate : _toDate;
 
-          // 0. Overlap Check
+          // 0. Zero Working Days / Holiday Check
+          if (days <= 0) {
+            _showPolicyAlert(
+              context,
+              _selectedLeaveType == 'Casual Leave'
+                  ? 'The selected date falls on an official holiday or weekend (e.g., Sunday / 2nd or 4th Saturday).\n\nCasual Leave cannot be applied for 0 working days. Please select working days.'
+                  : 'Selected date range results in 0 working days ($days days). Please choose valid dates.',
+            );
+            return;
+          }
+
+          // 1. Prohibit Backdating for strictly forward leaves
+          final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+          final fromClean = DateTime(_fromDate.year, _fromDate.month, _fromDate.day);
+          if ((_selectedLeaveType == 'Half Pay Leave' ||
+                  _selectedLeaveType == 'Commuted Leave' ||
+                  _selectedLeaveType == 'Maternity Leave') &&
+              fromClean.isBefore(today)) {
+            _showPolicyAlert(
+              context,
+              'Backdated leave applications are strictly not allowed for $_selectedLeaveType as per government rules.',
+            );
+            return;
+          }
+
+          // 2. Overlap Check
           final activeError = _validateActiveLeave(_fromDate, effectiveToDate, provider.requests);
           if (activeError != null) { _showPolicyAlert(context, activeError); return; }
 
-          // 1. Casual Leave
+          // 3. Casual Leave
           final clError = _validateCasualLeaveRules(_fromDate, effectiveToDate, provider.requests, provider);
           if (clError != null) { _showPolicyAlert(context, clError); return; }
 
-          // 2. Commuted Leave
+          // 4. Commuted Leave
           final commError = _validateCommutedLeaveRules(_fromDate, effectiveToDate, provider.user, provider.balances, provider.requests);
           if (commError != null) { _showPolicyAlert(context, commError); return; }
 
-          // 3. Half Pay Leave
+          // 5. Half Pay Leave
           final hplError = _validateHalfPayLeaveRules(_fromDate, effectiveToDate, provider.user, provider.balances, provider.requests);
           if (hplError != null) { _showPolicyAlert(context, hplError); return; }
 
-          // 4. Earned Leave
+          // 6. Earned Leave
           final elError = _validateEarnedLeaveRules(_fromDate, effectiveToDate, provider.user, provider.requests);
           if (elError != null) { _showPolicyAlert(context, elError); return; }
 
-          // 5. Maternity Leave
+          // 7. Maternity Leave
           final mlError = _validateMaternityLeaveRules(provider.user);
           if (mlError != null) { _showPolicyAlert(context, mlError); return; }
 
-          // 6. Paternity Leave
+          // 8. Paternity Leave
           final plError = _validatePaternityLeaveRules(_fromDate, provider.user);
           if (plError != null) { _showPolicyAlert(context, plError); return; }
 
-          // 7. Compensatory Leave
+          // 9. Compensatory Leave
           final compError = _validateCompensatoryLeaveRules(_fromDate, effectiveToDate, provider.compOffCredits);
           if (compError != null) { _showPolicyAlert(context, compError); return; }
 
@@ -1991,7 +2153,7 @@ class _LeaveApplySheetState extends State<LeaveApplySheet> {
             orElse: () => const LeavePolicy(id: 'CL', title: '', description: '', totalDays: 0, usedDays: 0, iconName: '', colorValue: 0),
           ).id;
 
-          if (await provider.applyLeave(
+          final success = await provider.applyLeave(
             leaveType: selectedPolicyId, 
             fromDate: _fromDate, 
             toDate: effectiveToDate, 
@@ -1999,10 +2161,39 @@ class _LeaveApplySheetState extends State<LeaveApplySheet> {
                     (_isHalfDay ? ' (Half Day - $_halfDaySession)' : ''), 
             customDays: days,
             globalProvider: globalLeaveProvider,
-          )) { 
+          );
+
+          if (success) { 
             if (mounted) {
               Navigator.pop(context); 
-              AppHelpers.showSuccess(context, 'Request submitted!');
+              AppHelpers.showSuccess(context, 'Leave application submitted successfully!');
+            }
+          } else {
+            if (mounted) {
+              String? rawError = provider.lastErrorMessage ?? globalLeaveProvider.lastErrorMessage;
+              if (rawError != null) {
+                if (rawError.contains('<html') ||
+                    rawError.contains('<!DOCTYPE') ||
+                    rawError.contains('<head') ||
+                    rawError.contains('<body') ||
+                    rawError.contains('redirecting')) {
+                  rawError = 'A server or database issue occurred while submitting your leave application.';
+                } else if (rawError.contains('<') && rawError.contains('>')) {
+                  rawError = rawError.replaceAll(RegExp(r'<[^>]*>'), ' ').trim();
+                }
+              }
+
+              final displayError = (rawError != null && rawError.trim().isNotEmpty)
+                  ? (rawError.toLowerCase().contains('administrator')
+                      ? rawError
+                      : '$rawError\n\nPlease contact the Administrator if this issue persists.')
+                  : 'Unable to submit leave application. Please check your leave balance or contact the Administrator.';
+
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  _showPolicyAlert(context, displayError);
+                }
+              });
             }
           } 
         } 
@@ -2212,8 +2403,8 @@ class _EmployeeLeaveDetailsSheet extends StatelessWidget {
           _infoTile('Leave Type', request.leaveType, Icons.event_note_outlined),
           Row(
             children: [
-              Expanded(child: _infoTile('From', request.fromDate, Icons.calendar_today_outlined)),
-              Expanded(child: _infoTile('To', request.toDate, Icons.event_available_outlined)),
+              Expanded(child: _infoTile('From', _formatDate(request.fromDate), Icons.calendar_today_outlined)),
+              Expanded(child: _infoTile('To', _formatDate(request.toDate), Icons.event_available_outlined)),
             ],
           ),
           _infoTile('Total Duration', '${request.days} Day${request.days > 1 ? 's' : ''}', Icons.timer_outlined),
@@ -2280,6 +2471,16 @@ class _EmployeeLeaveDetailsSheet extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatDate(String d) {
+    if (d.isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(d);
+      return DateFormat('dd MMM yyyy').format(dt);
+    } catch (_) {
+      return d;
+    }
   }
 
   Widget _infoTile(String label, String value, IconData icon) {

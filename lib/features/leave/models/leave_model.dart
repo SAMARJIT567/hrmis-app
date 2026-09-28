@@ -35,9 +35,14 @@ class LeaveRequest {
     this.remarks,
   });
 
-  factory LeaveRequest.fromJson(Map<String, dynamic> json) {
-    final fromDateStr = json['from_date']?.toString() ?? '';
-    final toDateStr = json['to_date']?.toString() ?? '';
+  factory LeaveRequest.fromJson(
+    Map<String, dynamic> json, {
+    Map<String, String>? leaveTypeMap,
+    String? defaultEmployeeName,
+    String? defaultDepartment,
+  }) {
+    final fromDateStr = json['from_date']?.toString() ?? json['applied_from_date']?.toString() ?? '';
+    final toDateStr = json['to_date']?.toString() ?? json['applied_to_date']?.toString() ?? '';
     double calculatedDays = 1.0;
     try {
       if (fromDateStr.isNotEmpty && toDateStr.isNotEmpty) {
@@ -48,86 +53,88 @@ class LeaveRequest {
     } catch (_) {}
 
     String resolvedStatus = json['status']?.toString().toLowerCase() ?? 'pending';
-    if (resolvedStatus == 'approve') resolvedStatus = 'approved';
-    if (resolvedStatus == 'reject') resolvedStatus = 'rejected';
+    if (resolvedStatus == 'approve' || resolvedStatus == 'approved') {
+      resolvedStatus = 'approved';
+    } else if (resolvedStatus == 'reject' || resolvedStatus == 'rejected') {
+      resolvedStatus = 'rejected';
+    } else if (resolvedStatus == 'submited' || resolvedStatus == 'submitted' || resolvedStatus == 'pending') {
+      resolvedStatus = 'pending';
+    } else if (resolvedStatus == 'closed') {
+      resolvedStatus = 'closed';
+    }
+
+    // Default mapping matching GMDA leave_type_masters database
+    const Map<String, String> defaultLeaveTypeMap = {
+      '1': 'Casual Leave',
+      '2': 'Earned Leave',
+      '3': 'Half Pay Leave',
+      '4': 'Commuted Leave',
+      '9': 'Maternity Leave',
+      '11': 'Child care Leave',
+      '12': 'Matri Pitri Bandana',
+      '13': 'Restricted Holiday',
+      '14': 'Tour',
+    };
+
+    String resolvedLeaveType = 'Casual Leave';
+    if (json['leave_type'] is Map && json['leave_type']['name'] != null) {
+      resolvedLeaveType = json['leave_type']['name'].toString();
+    } else {
+      final typeId = json['leave_type_id']?.toString() ?? json['leave_type']?.toString();
+      if (typeId != null && leaveTypeMap != null && leaveTypeMap.containsKey(typeId)) {
+        resolvedLeaveType = leaveTypeMap[typeId]!;
+      } else if (typeId != null && defaultLeaveTypeMap.containsKey(typeId)) {
+        resolvedLeaveType = defaultLeaveTypeMap[typeId]!;
+      } else if (json['leave_type_name'] != null) {
+        resolvedLeaveType = json['leave_type_name'].toString();
+      }
+    }
+
+    String resolvedEmpName = defaultEmployeeName ?? 'Employee';
+    if (json['emp_info'] is Map && json['emp_info']['name'] != null) {
+      resolvedEmpName = json['emp_info']['name'].toString();
+    } else if (json['user'] is Map && json['user']['name'] != null) {
+      resolvedEmpName = json['user']['name'].toString();
+    } else if (json['emp_name'] != null) {
+      resolvedEmpName = json['emp_name'].toString();
+    }
+
+    String resolvedDept = defaultDepartment ?? 'GMDA';
+    if (json['emp_info'] is Map &&
+        json['emp_info']['employee'] is Map &&
+        json['emp_info']['employee']['department'] is Map) {
+      resolvedDept = json['emp_info']['employee']['department']['name']?.toString() ?? resolvedDept;
+    } else if (json['department'] != null) {
+      resolvedDept = json['department'].toString();
+    }
+
+    String appliedOnStr = '';
+    if (json['created_at'] != null) {
+      final rawCreated = json['created_at'].toString();
+      try {
+        final dt = DateTime.parse(rawCreated);
+        appliedOnStr = '${dt.day.toString().padLeft(2, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.year}';
+      } catch (_) {
+        appliedOnStr = rawCreated.length >= 10 ? rawCreated.substring(0, 10) : rawCreated;
+      }
+    }
 
     return LeaveRequest(
       id: json['id']?.toString() ?? '',
       employeeId: json['emp_id']?.toString() ?? json['emp_code']?.toString() ?? '',
-      employeeName: json['emp_info']?['name']?.toString() ?? 'N/A',
-      department: json['emp_info']?['employee']?['department']?['name']?.toString() ?? 'N/A',
-      leaveType: json['leave_type']?['name']?.toString() ?? 'N/A',
+      employeeName: resolvedEmpName,
+      department: resolvedDept,
+      leaveType: resolvedLeaveType,
       fromDate: fromDateStr,
       toDate: toDateStr,
       days: calculatedDays,
       reason: json['reason']?.toString() ?? '',
       status: resolvedStatus,
-      appliedOn: json['created_at'] != null ? json['created_at'].toString().substring(0, 10) : '',
+      appliedOn: appliedOnStr,
       approvedBy: json['approved_by']?.toString(),
       remarks: json['remarks']?.toString(),
     );
   }
-}
-
-class LeaveMockData {
-  static List<LeaveRequest> get requests => [
-    const LeaveRequest(
-      id: 'LV001',
-      employeeId: 'EMP001',
-      employeeName: 'Rahul Sharma',
-      department: 'Engineering',
-      leaveType: 'Casual Leave',
-      fromDate: '2026-07-20',
-      toDate: '2026-07-22',
-      days: 3.0,
-      reason: 'Family function at home town',
-      status: 'pending',
-      appliedOn: '2026-07-15',
-    ),
-    const LeaveRequest(
-      id: 'LV002',
-      employeeId: 'EMP003',
-      employeeName: 'Amit Verma',
-      department: 'Finance',
-      leaveType: 'Earned Leave',
-      fromDate: '2026-07-10',
-      toDate: '2026-07-14',
-      days: 5.0,
-      reason: 'Personal work and travel',
-      status: 'approved',
-      appliedOn: '2026-07-05',
-      approvedBy: 'Priya Singh',
-      remarks: 'Approved, handover details submitted',
-    ),
-    const LeaveRequest(
-      id: 'LV003',
-      employeeId: 'EMP004',
-      employeeName: 'Sneha Patel',
-      department: 'Design',
-      leaveType: 'Casual Leave',
-      fromDate: '2026-07-18',
-      toDate: '2026-07-18',
-      days: 1.0,
-      reason: 'Doctor appointment',
-      status: 'rejected',
-      appliedOn: '2026-07-14',
-      approvedBy: 'Priya Singh',
-      remarks: 'Rejected due to urgent design delivery deadline',
-    ),
-    const LeaveRequest(
-      id: 'LV004',
-      employeeId: 'EMP006',
-      employeeName: 'Ananya Roy',
-      department: 'Engineering',
-      leaveType: 'Maternity Leave',
-      fromDate: '2026-08-01',
-      toDate: '2026-11-30',
-      days: 122.0,
-      reason: 'Maternity leave application',
-      status: 'pending',
-      appliedOn: '2026-07-12',
-    ),
-  ];
 }
 
 class LeavePolicy {

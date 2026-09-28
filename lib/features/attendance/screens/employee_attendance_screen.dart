@@ -13,13 +13,13 @@ import 'package:geolocator/geolocator.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/location_service.dart';
 import '../../../core/utils/helpers.dart';
-import '../../../shared/widgets/loading_widget.dart';
 import '../../../core/providers/navigation_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/employee_attendance_provider.dart';
 import 'check_in_screen.dart';
 import '../../leave/providers/leave_provider.dart';
 import '../../leave/models/leave_model.dart';
+import '../../leave/screens/employee_leave_screen.dart';
 
 class EmployeeAttendanceScreen extends StatefulWidget {
   const EmployeeAttendanceScreen({super.key});
@@ -166,10 +166,13 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
   }
 
   Widget _buildStickyHeader(AuthUser? user, BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+    final headerHeight = topPadding + 62.h;
+
     return SliverAppBar(
-      expandedHeight: 85.h,
-      collapsedHeight: 50.h,
-      toolbarHeight: 50.h,
+      expandedHeight: headerHeight,
+      collapsedHeight: headerHeight,
+      toolbarHeight: headerHeight,
       floating: false,
       pinned: true,
       elevation: 0,
@@ -299,34 +302,7 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                       context,
                       MaterialPageRoute(builder: (_) => const CheckInScreen()),
                     );
-                  }
-                ),
-                SizedBox(height: 12.h),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.18),
-                    borderRadius: BorderRadius.circular(12.r),
-                    border: Border.all(color: Colors.white.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.schedule_rounded, color: Colors.white, size: 15.sp),
-                      SizedBox(width: 6.w),
-                      Flexible(
-                        child: Text(
-                          'Shift Slots: 06:00 AM - 11:00 AM & 04:00 PM - 10:00 PM',
-                          style: GoogleFonts.poppins(
-                            fontSize: 10.5.sp,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ],
-                  ),
+                  },
                 ),
               ]
               else
@@ -437,7 +413,10 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
           Expanded(
             child: GestureDetector(
               onTap: () {
-                context.read<NavigationProvider>().setIndex(2);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const EmployeeLeaveScreen()),
+                );
               },
               child: _quickActionCard(
                 icon: Icons.event_note_rounded,
@@ -518,22 +497,10 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
     return Consumer<EmployeeAttendanceProvider>(
       builder: (_, provider, __) {
         final now = DateTime.now();
-        int yearlyPresent = provider.records.where((r) {
-          try {
-            DateTime recordDate;
-            if (r.date.contains(RegExp(r'[a-zA-Z]'))) {
-              recordDate = DateFormat('dd MMM yyyy').parse(r.date);
-            } else {
-              recordDate = DateFormat('yyyy-MM-dd').parse(r.date);
-            }
-            return recordDate.year == now.year &&
-                (r.status == 'Present' || r.status == 'Late' || r.status == 'Late In' || r.status == 'Half Day' || r.status == 'Tour' || r.status == 'Early Out');
-          } catch (_) {
-            return false;
-          }
-        }).length;
+        final Set<String> uniqueYearlyPresentDates = {};
+        final Set<String> uniqueYearlyLateDates = {};
 
-        int yearlyLate = provider.records.where((r) {
+        for (final r in provider.records) {
           try {
             DateTime recordDate;
             if (r.date.contains(RegExp(r'[a-zA-Z]'))) {
@@ -541,12 +508,21 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
             } else {
               recordDate = DateFormat('yyyy-MM-dd').parse(r.date);
             }
-            return recordDate.year == now.year &&
-                (r.status == 'Late' || r.status == 'Late In');
-          } catch (_) {
-            return false;
-          }
-        }).length;
+            if (recordDate.year == now.year) {
+              final dateKey = DateFormat('yyyy-MM-dd').format(recordDate);
+              final s = r.status.toLowerCase().trim();
+              if (s == 'present' || s == 'late' || s == 'late in' || s == 'half day' || s == 'tour' || s == 'early out') {
+                uniqueYearlyPresentDates.add(dateKey);
+              }
+              if (s == 'late' || s == 'late in') {
+                uniqueYearlyLateDates.add(dateKey);
+              }
+            }
+          } catch (_) {}
+        }
+
+        int yearlyPresent = uniqueYearlyPresentDates.length;
+        int yearlyLate = uniqueYearlyLateDates.length;
 
         return Container(
           margin: EdgeInsets.symmetric(horizontal: 16.r),

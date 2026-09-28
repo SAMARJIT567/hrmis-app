@@ -17,6 +17,7 @@ class LeaveProvider extends ChangeNotifier {
   List<CompOffCredit> _compOffReports = [];
   bool _isLoading = false;
   String _filter = 'All';
+  String? _lastErrorMessage;
 
   List<LeavePolicy> _policies = [];
 
@@ -24,6 +25,7 @@ class LeaveProvider extends ChangeNotifier {
   List<LeaveRequest> get allRequests => _all;
   List<CompOffCredit> get compOffReports => _compOffReports;
   bool get isLoading => _isLoading;
+  String? get lastErrorMessage => _lastErrorMessage;
   String get currentFilter => _filter;
   List<LeavePolicy> get policies => _policies;
 
@@ -215,21 +217,8 @@ class LeaveProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    final prefs = await SharedPreferences.getInstance();
-    final userJson = prefs.getString('user_data');
-    bool isAdmin = true;
-    if (userJson != null) {
-      try {
-        final Map<String, dynamic> data = jsonDecode(userJson);
-        isAdmin = data['role']?.toString().toLowerCase() == 'admin';
-      } catch (_) {}
-    }
-
-    if (isAdmin) {
-      _all = List.from(LeaveMockData.requests);
-    } else {
-      try {
-        final response = await _apiService.getLeaves();
+    try {
+      final response = await _apiService.getLeaves();
         
         // Parse leave availability / policies dynamically from Laravel
         if (response['leave_availability'] != null) {
@@ -284,11 +273,64 @@ class LeaveProvider extends ChangeNotifier {
         // Parse requests/applications
         final List<dynamic>? myApps = response['my_applications'];
         final List<dynamic>? otherApps = response['other_employee_applications'];
-        
+
+        // Build dynamic leave type map from API
+        final Map<String, String> leaveTypeMap = {};
+        if (response['leave_type'] is List) {
+          for (var lt in response['leave_type']) {
+            if (lt is Map && lt['id'] != null && lt['name'] != null) {
+              leaveTypeMap[lt['id'].toString()] = lt['name'].toString();
+            }
+          }
+        }
+        if (response['leave_availability'] is List) {
+          for (var la in response['leave_availability']) {
+            if (la is Map &&
+                la['leave_type_id'] != null &&
+                la['leave_type'] is Map &&
+                la['leave_type']['name'] != null) {
+              leaveTypeMap[la['leave_type_id'].toString()] = la['leave_type']['name'].toString();
+            }
+          }
+        }
+
+        // Determine logged-in user name & department from SharedPreferences or response['users']
+        String currentUserName = 'Employee';
+        String currentUserDept = 'GMDA';
+        final prefs = await SharedPreferences.getInstance();
+        final userJson = prefs.getString('user_data');
+        if (userJson != null) {
+          try {
+            final Map<String, dynamic> uMap = jsonDecode(userJson);
+            if (uMap['name'] != null) currentUserName = uMap['name'].toString();
+            if (uMap['department'] != null) currentUserDept = uMap['department'].toString();
+          } catch (_) {}
+        }
+        if (response['users'] is List && (response['users'] as List).isNotEmpty) {
+          final firstUser = (response['users'] as List).first;
+          if (firstUser is Map && firstUser['name'] != null) {
+            currentUserName = firstUser['name'].toString();
+          }
+        }
+
         if (myApps != null) {
-          _all = myApps.map((json) => LeaveRequest.fromJson(json as Map<String, dynamic>)).toList();
+          _all = myApps
+              .map((json) => LeaveRequest.fromJson(
+                    json as Map<String, dynamic>,
+                    leaveTypeMap: leaveTypeMap,
+                    defaultEmployeeName: currentUserName,
+                    defaultDepartment: currentUserDept,
+                  ))
+              .toList();
         } else if (otherApps != null) {
-          _all = otherApps.map((json) => LeaveRequest.fromJson(json as Map<String, dynamic>)).toList();
+          _all = otherApps
+              .map((json) => LeaveRequest.fromJson(
+                    json as Map<String, dynamic>,
+                    leaveTypeMap: leaveTypeMap,
+                    defaultEmployeeName: currentUserName,
+                    defaultDepartment: currentUserDept,
+                  ))
+              .toList();
         } else {
           _all = [];
         }
@@ -296,7 +338,6 @@ class LeaveProvider extends ChangeNotifier {
         debugPrint('❌ Error loading leaves: $e');
         _all = [];
       }
-    }
 
     _applyFilter();
     _isLoading = false;
@@ -355,6 +396,7 @@ class LeaveProvider extends ChangeNotifier {
     double? days,
   }) async {
     _isLoading = true;
+    _lastErrorMessage = null;
     notifyListeners();
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -374,16 +416,30 @@ class LeaveProvider extends ChangeNotifier {
         days: days,
       );
 
-      final msg = response['message']?.toString().toLowerCase() ?? '';
+      final rawMsg = response['message']?.toString() ?? response['error']?.toString() ?? '';
       final status = response['status']?.toString().toLowerCase() ?? '';
       
-      if (msg.contains('saved') || msg.contains('success') || status == 'success') {
+      if (rawMsg.toLowerCase().contains('saved') || rawMsg.toLowerCase().contains('success') || status == 'success') {
+        _lastErrorMessage = null;
         await loadLeaves(); // Reload to fetch the new leave record
         return true;
       }
+      String cleanMsg = rawMsg;
+      if (cleanMsg.contains('<html') || cleanMsg.contains('<!DOCTYPE') || cleanMsg.contains('<body') || cleanMsg.contains('<head')) {
+        cleanMsg = 'A server or database issue occurred while processing your request. Please contact your system administrator.';
+      }
+
+      _lastErrorMessage = cleanMsg.isNotEmpty 
+          ? cleanMsg 
+          : 'Unable to submit leave request. Please check your leave balance or contact Administrator.';
       return false;
     } catch (e) {
       debugPrint('❌ Error applying leave to Laravel backend: $e');
+      String err = e.toString().replaceFirst('Exception: ', '');
+      if (err.contains('<html') || err.contains('<!DOCTYPE') || err.contains('<body') || err.contains('<head')) {
+        err = 'A server or database issue occurred while processing your request. Please contact your system administrator.';
+      }
+      _lastErrorMessage = err;
       return false;
     } finally {
       _isLoading = false;

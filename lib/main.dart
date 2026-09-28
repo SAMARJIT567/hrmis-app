@@ -9,11 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app/app.dart';
 import 'features/auth/providers/auth_provider.dart';
-import 'features/employees/providers/employee_provider.dart';
-import 'features/attendance/providers/attendance_provider.dart';
 import 'features/attendance/providers/employee_attendance_provider.dart';
 import 'features/leave/providers/leave_provider.dart';
-import 'features/payroll/providers/payroll_provider.dart';
 import 'features/profile/providers/profile_provider.dart';
 import 'features/attendance/providers/office_settings_provider.dart';
 import 'core/providers/navigation_provider.dart';
@@ -48,11 +45,8 @@ class HRMISApp extends StatelessWidget {
         return MultiProvider(
           providers: [
             ChangeNotifierProvider(create: (_) => AuthProvider()),
-            ChangeNotifierProvider(create: (_) => EmployeeProvider()),
-            ChangeNotifierProvider(create: (_) => AttendanceProvider()),
             ChangeNotifierProvider(create: (_) => EmployeeAttendanceProvider()),
             ChangeNotifierProvider(create: (_) => LeaveProvider()),
-            ChangeNotifierProvider(create: (_) => PayrollProvider()),
             ChangeNotifierProvider(create: (_) => ProfileProvider()),
             ChangeNotifierProvider(create: (_) => OfficeSettingsProvider()),
             ChangeNotifierProvider(create: (_) => NavigationProvider()),

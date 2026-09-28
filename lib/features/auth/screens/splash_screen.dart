@@ -10,7 +10,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -77,17 +76,31 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: AppColors.headerGradient,
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset(
+            'assets/images/aidc_building.jpg',
+            fit: BoxFit.cover,
+          ),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF0F172A).withValues(alpha: 0.82),
+                  const Color(0xFF1E3A8A).withValues(alpha: 0.88),
+                  const Color(0xFF0B192C).withValues(alpha: 0.94),
+                ],
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(),
               FadeTransition(
                 opacity: _fadeAnimation,
                 child: ScaleTransition(
@@ -95,21 +108,26 @@ class _SplashScreenState extends State<SplashScreen>
                   child: Column(
                     children: [
                       Container(
-                        width: 100.w,
-                        height: 100.h,
-                        padding: EdgeInsets.all(20.r),
+                        width: 105.w,
+                        height: 105.h,
+                        padding: EdgeInsets.all(14.r),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(28.r),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.3),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Icon(
-                          Icons.business_center_rounded,
-                          size: 50.sp,
                           color: Colors.white,
+                          borderRadius: BorderRadius.circular(28.r),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 24,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(18.r),
+                          child: Image.asset(
+                            'assets/images/aidc_logo.png',
+                            fit: BoxFit.contain,
+                          ),
                         ),
                       ),
                       SizedBox(height: 24.h),
@@ -147,7 +165,9 @@ class _SplashScreenState extends State<SplashScreen>
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(3, (i) => _buildDot(i)),
                       ),
-                      SizedBox(height: 20.h),
+                      SizedBox(height: 24.h),
+                      _buildPoweredBy(),
+                      SizedBox(height: 16.h),
                     ],
                   ),
                 ),
@@ -155,8 +175,9 @@ class _SplashScreenState extends State<SplashScreen>
             ],
           ),
         ),
-      ),
-    );
+      ],
+    ),
+  );
   }
 
   Widget _buildDot(int index) {
@@ -176,4 +197,59 @@ class _SplashScreenState extends State<SplashScreen>
       },
     );
   }
-}
+
+  Widget _buildPoweredBy() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 28.w,
+              height: 1.h,
+              color: Colors.white.withOpacity(0.3),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              child: Text(
+                'POWERED BY',
+                style: GoogleFonts.poppins(
+                  fontSize: 10.5.sp,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.5,
+                  color: Colors.white.withOpacity(0.7),
+                ),
+              ),
+            ),
+            Container(
+              width: 28.w,
+              height: 1.h,
+              color: Colors.white.withOpacity(0.3),
+            ),
+          ],
+        ),
+        SizedBox(height: 10.h),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 8.h),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14.r),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.2),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Image.asset(
+            'assets/images/webcom_logo.png',
+            height: 32.h,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ],
+    );
+  }
+}

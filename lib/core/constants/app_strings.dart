@@ -9,14 +9,14 @@ class AppStrings {
   AppStrings._();
 
   // ─── App General ──────────────────────────────────────────────
-  static const String appName = 'HRMIS';
-  static const String appFullName = 'HR Management System';
-  static const String appTagline = 'Smart HR — Simplified';
-  static const String companyName = 'TechCorp Pvt. Ltd.';
+  static const String appName = 'AIDC HRMIS';
+  static const String appFullName = 'Attendance Management System';
+  static const String appTagline = 'Smart Attendance — Simplified';
+  static const String companyName = 'Web.com India Pvt. Ltd.';
 
   // ─── Auth Screens ─────────────────────────────────────────────
   static const String welcomeBack = 'Welcome Back!';
-  static const String loginSubtitle = 'Sign in to your HR account';
+  static const String loginSubtitle = 'Sign in to your account';
   static const String emailLabel = 'Email Address';
   static const String emailHint = 'Enter your email';
   static const String passwordLabel = 'Password';

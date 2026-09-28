@@ -40,6 +40,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
   bool _isLocationError = false;
   String _locationStatus = 'Locking GPS signal...';
   bool _isSubmitting = false;
+  bool _showShutterFlash = false;
 
   List<dynamic> _assignedZones = [];
 
@@ -82,7 +83,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
           (camera) => camera.lensDirection == CameraLensDirection.front,
           orElse: () => _cameras![0],
         );
-        _cameraController = CameraController(frontCamera, ResolutionPreset.veryHigh, enableAudio: false);
+        _cameraController = CameraController(frontCamera, ResolutionPreset.high, enableAudio: false);
         await _cameraController!.initialize();
         if (mounted) setState(() => _isCameraInitialized = true);
       }
@@ -395,6 +396,14 @@ class _CheckInScreenState extends State<CheckInScreen> {
                 ),
               ),
 
+              // Camera shutter flash pulse
+              if (_showShutterFlash)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ),
+
               // 4. Overlaid Bottom Panel
               Positioned(
                 bottom: 0,
@@ -471,7 +480,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
   }
 
   Widget _buildFullscreenCamera() {
-    if (!_isCameraInitialized || _cameraController == null) {
+    if (!_isCameraInitialized || _cameraController == null || !_cameraController!.value.isInitialized) {
       return Container(
         color: Colors.black,
         child: const Center(
@@ -490,15 +499,17 @@ class _CheckInScreenState extends State<CheckInScreen> {
       );
     }
 
-    final size = MediaQuery.of(context).size;
-    var deviceRatio = size.width / size.height;
+    final previewSize = _cameraController!.value.previewSize;
+    if (previewSize == null) {
+      return Container(color: Colors.black);
+    }
 
     return SizedBox.expand(
       child: FittedBox(
         fit: BoxFit.cover,
         child: SizedBox(
-          width: _cameraController!.value.previewSize!.height,
-          height: _cameraController!.value.previewSize!.width,
+          width: previewSize.height,
+          height: previewSize.width,
           child: CameraPreview(_cameraController!),
         ),
       ),
@@ -745,6 +756,12 @@ class _CheckInScreenState extends State<CheckInScreen> {
 
             if (_isCameraInitialized && _cameraController != null) {
               try {
+                // Shutter flash visual pulse
+                if (mounted) {
+                  setState(() => _showShutterFlash = true);
+                  await Future.delayed(const Duration(milliseconds: 120));
+                  if (mounted) setState(() => _showShutterFlash = false);
+                }
                 capturedFile = await _cameraController!.takePicture();
               } catch (e) {
                 debugPrint('❌ Inline capture failed, launching native camera picker: $e');
@@ -768,6 +785,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
               return;
             }
 
+            if (!mounted) return;
             final zoneIdVal = matchedZone != null ? matchedZone['id'].toString() : '1';
             final success = await context.read<EmployeeAttendanceProvider>().checkIn(
               latitude: _latitude!,
@@ -777,7 +795,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
             );
 
             if (success && mounted) {
-              AppHelpers.showSuccess(context, 'Check-in successful!');
+              AppHelpers.showSuccess(context, 'Attendance marked successfully!');
               Navigator.pop(context);
             }
           } catch (e) {
@@ -790,17 +808,17 @@ class _CheckInScreenState extends State<CheckInScreen> {
         },
         icon: _isSubmitting
           ? SizedBox(width: 18.w, height: 18.h, child: const CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-          : Icon(Icons.camera_alt, size: 18.sp),
+          : Icon(Icons.camera_alt_rounded, size: 20.sp),
         label: Text(
-          _isSubmitting ? 'Verifying Coordinates...' : 'Take Selfie & Submit',
+          _isSubmitting ? 'Submitting Attendance...' : 'Capture & Check In',
           style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.w600)
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF00C853),
+          backgroundColor: const Color(0xFF10B981), // Emerald green
           foregroundColor: Colors.white,
           padding: EdgeInsets.symmetric(vertical: 14.h),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
-          elevation: 0,
+          elevation: 2,
         ),
       ),
     );

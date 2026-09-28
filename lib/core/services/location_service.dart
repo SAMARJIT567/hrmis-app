@@ -4,7 +4,6 @@
 // Service for handling actual location operations using geolocator
 // ============================================================
 
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -31,14 +30,27 @@ class LocationService {
 
   Future<Map<String, dynamic>> getCurrentLocation() async {
     try {
-      final position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high
-      );
-      
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 10),
+        );
+      } catch (_) {
+        position = await Geolocator.getLastKnownPosition();
+      }
+
+      if (position != null) {
+        return {
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'address': 'Current Location',
+        };
+      }
       return {
-        'latitude': position.latitude,
-        'longitude': position.longitude,
-        'address': 'Current Location', // Reverse geocoding can be added with geocoding package
+        'latitude': 0.0,
+        'longitude': 0.0,
+        'address': 'Unknown Location',
       };
     } catch (e) {
       debugPrint('❌ Failed to get location: $e');

@@ -73,70 +73,6 @@ class LeaveBalanceScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildBalanceHeader(LeaveProvider prov) {
-    final cl = prov.policies.firstWhere(
-      (p) => p.id.toUpperCase() == 'CL', 
-      orElse: () => prov.policies.isNotEmpty ? prov.policies[0] : const LeavePolicy(id: 'CL', title: 'Casual Leave', description: '', totalDays: 0, usedDays: 0, iconName: '', colorValue: 0),
-    );
-    final sl = prov.policies.firstWhere(
-      (p) => p.id.toUpperCase() == 'SL' || p.id.toUpperCase() == 'COL' || p.id.toUpperCase() == 'HPL', 
-      orElse: () => prov.policies.length > 1 ? prov.policies[1] : const LeavePolicy(id: 'SL', title: 'Sick Leave', description: '', totalDays: 0, usedDays: 0, iconName: '', colorValue: 0),
-    );
-    final el = prov.policies.firstWhere(
-      (p) => p.id.toUpperCase() == 'EL', 
-      orElse: () => prov.policies.length > 2 ? prov.policies[2] : const LeavePolicy(id: 'EL', title: 'Earned Leave', description: '', totalDays: 0, usedDays: 0, iconName: '', colorValue: 0),
-    );
-    
-    int totalAvailable = 0;
-    for (var p in prov.policies) {
-      totalAvailable += (p.totalDays - p.usedDays);
-    }
-
-    return Container(
-      padding: EdgeInsets.all(20.r),
-      decoration: BoxDecoration(
-        gradient: AppColors.headerGradient,
-        borderRadius: BorderRadius.circular(20.r),
-        boxShadow: [
-          BoxShadow(color: AppColors.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8)),
-        ],
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _balanceSummaryItem('${cl.totalDays - cl.usedDays}', 'CL'),
-              _balanceSummaryItem('${sl.totalDays - sl.usedDays}', 'SL'),
-              _balanceSummaryItem('${el.totalDays - el.usedDays}', 'EL'),
-              _balanceSummaryItem('$totalAvailable', 'Total'),
-            ],
-          ),
-          SizedBox(height: 16.h),
-          Text(
-            'Current available paid leave policy summary',
-            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11.sp),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _balanceSummaryItem(String count, String label) {
-    return Column(
-      children: [
-        Text(
-          count,
-          style: GoogleFonts.poppins(color: Colors.white, fontSize: 20.sp, fontWeight: FontWeight.w800),
-        ),
-        Text(
-          label,
-          style: GoogleFonts.poppins(color: Colors.white.withOpacity(0.8), fontSize: 12.sp, fontWeight: FontWeight.w600),
-        ),
-      ],
-    );
-  }
-
   Widget _buildLeaveCard(BuildContext context, LeavePolicy policy, bool isAdmin) {
     final used = policy.usedDays;
     final total = policy.totalDays;
@@ -230,46 +166,6 @@ class LeaveBalanceScreen extends StatelessWidget {
                 color: AppColors.textTertiary,
                 fontStyle: FontStyle.italic,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLWPCard() {
-    return Container(
-      margin: EdgeInsets.only(bottom: 16.h),
-      padding: EdgeInsets.all(16.r),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16.r),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-        border: Border.all(color: AppColors.border, width: 0.5),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: EdgeInsets.all(10.r),
-            decoration: BoxDecoration(color: Colors.redAccent.withOpacity(0.1), borderRadius: BorderRadius.circular(12.r)),
-            child: Icon(Icons.money_off_rounded, color: Colors.redAccent, size: 22.sp),
-          ),
-          SizedBox(width: 16.w),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Leave Without Pay',
-                  style: GoogleFonts.poppins(fontSize: 14.sp, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
-                ),
-                Text(
-                  'Unpaid Category. Salary deductions apply.',
-                  style: GoogleFonts.poppins(fontSize: 11.sp, color: AppColors.textTertiary, fontStyle: FontStyle.italic),
-                ),
-              ],
             ),
           ),
         ],

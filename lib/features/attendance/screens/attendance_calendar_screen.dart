@@ -13,7 +13,6 @@ import 'package:table_calendar/table_calendar.dart';
 import '../providers/employee_attendance_provider.dart';
 import '../../leave/providers/leave_provider.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/utils/helpers.dart';
 
 class AttendanceCalendarScreen extends StatefulWidget {
   const AttendanceCalendarScreen({super.key});
@@ -131,15 +130,16 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
   Color getStatusColor(String? status) {
     if (status == null) return AppColors.border;
     switch (status) {
-      case 'Present': return AppColors.success;
-      case 'Absent': return AppColors.error;
-      case 'Leave': return Colors.purple;
-      case 'Holiday': return Colors.orange;
+      case 'Present': return const Color(0xFF059905); // backend .present: rgba(5, 153, 5, 0.6)
+      case 'Absent': return const Color(0xFFFC0000);  // backend .absent: rgba(252, 0, 0, 0.6)
+      case 'Leave': return const Color(0xFFAA7FE4);   // backend .on_leave: rgba(170, 127, 228, 0.4)
+      case 'Tour': return const Color(0xFFAA7FE4);    // backend .on_tour: rgba(170, 127, 228, 0.4)
+      case 'Half Day': return const Color(0xFFAA7FE4);// backend .half_day: rgba(170, 127, 228, 0.4)
       case 'Late':
-      case 'Late In': return Colors.pinkAccent;
-      case 'Weekend': return Colors.deepPurpleAccent;
-      case 'Tour': return Colors.indigo;
-      case 'Half Day': return Colors.blue;
+      case 'Late In': return const Color(0xFFAD4E4E); // backend .not_in_time: rgba(173, 78, 78, 0.4)
+      case 'Early Out': return const Color(0xFF032EEC);// backend .early_out: rgba(3, 46, 236, 0.6)
+      case 'Holiday': return const Color(0xFF7E7B7B); // backend .holiday: rgba(126, 123, 123, 0.1)
+      case 'Weekend': return const Color(0xFF9E9E9E); // backend weekend/off
       default: return AppColors.textTertiary;
     }
   }
@@ -237,11 +237,14 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
 
   Widget _buildLegend() {
     final legendItems = [
-      {'status': 'Present', 'color': AppColors.success},
-      {'status': 'Absent', 'color': AppColors.error},
-      {'status': 'Leave', 'color': Colors.blue},
-      {'status': 'Weekend', 'color': Colors.purple},
-      {'status': 'Holiday', 'color': Colors.orange},
+      {'status': 'Present', 'color': getStatusColor('Present')},
+      {'status': 'Absent', 'color': getStatusColor('Absent')},
+      {'status': 'Leave', 'color': getStatusColor('Leave')},
+      {'status': 'Late In', 'color': getStatusColor('Late In')},
+      {'status': 'Half Day', 'color': getStatusColor('Half Day')},
+      {'status': 'Tour', 'color': getStatusColor('Tour')},
+      {'status': 'Holiday', 'color': getStatusColor('Holiday')},
+      {'status': 'Weekend', 'color': getStatusColor('Weekend')},
     ];
 
     return Container(
@@ -325,7 +328,6 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
                 date.month == DateTime.now().month &&
                 date.day == DateTime.now().day;
             final status = getStatusForDate(date, attendanceProv, leaveProv);
-            final isSelected = isSameDay(_selectedDate, date);
 
             final dayOfWeek = DateFormat('EEEE').format(date);
             final isWeekend = dayOfWeek.toLowerCase() == attendanceProv.weekend.toLowerCase();
@@ -340,34 +342,13 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
               displayStatus = 'Absent';
             }
 
-            // Determine color and text color matching the screenshot
-            Color cellBgColor = Colors.grey.withOpacity(0.12);
+            // Determine color and text color matching backend colors
+            Color cellBgColor = Colors.grey.withValues(alpha: 0.12);
             Color textColor = AppColors.textPrimary;
             Border? border;
 
-            if (displayStatus == 'Present') {
-              cellBgColor = AppColors.success; // Green
-              textColor = Colors.white;
-            } else if (displayStatus == 'Absent') {
-              cellBgColor = AppColors.error; // Red
-              textColor = Colors.white;
-            } else if (displayStatus == 'Leave') {
-              cellBgColor = Colors.purple; // Purple
-              textColor = Colors.white;
-            } else if (displayStatus == 'Weekend') {
-              cellBgColor = Colors.deepPurpleAccent; // Purple/Grey
-              textColor = Colors.white;
-            } else if (displayStatus == 'Holiday') {
-              cellBgColor = Colors.orange; // Orange
-              textColor = Colors.white;
-            } else if (displayStatus == 'Late In' || displayStatus == 'Late') {
-              cellBgColor = Colors.pinkAccent; // Pink/Red
-              textColor = Colors.white;
-            } else if (displayStatus == 'Half Day') {
-              cellBgColor = Colors.blue; // Blue
-              textColor = Colors.white;
-            } else if (displayStatus == 'Tour') {
-              cellBgColor = Colors.indigo; // Indigo
+            if (displayStatus.isNotEmpty) {
+              cellBgColor = getStatusColor(displayStatus);
               textColor = Colors.white;
             }
 
@@ -470,12 +451,9 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
     int halfDay = 0;
 
     final daysInMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
-
     for (int i = 1; i <= daysInMonth; i++) {
       final date = DateTime(_currentMonth.year, _currentMonth.month, i);
-      final checkDate = DateTime(date.year, date.month, date.day);
+
 
       final status = getStatusForDate(date, attendanceProv, leaveProv);
       final dayOfWeek = DateFormat('EEEE').format(date);
@@ -504,14 +482,14 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
     }
 
     final summaryItems = [
-      {'label': 'Present', 'count': present, 'code': 'P', 'color': AppColors.success},
-      {'label': 'Absent', 'count': absent, 'code': 'A', 'color': AppColors.error},
-      {'label': 'On Leave', 'count': leave, 'code': 'L', 'color': Colors.purple},
-      {'label': 'Weekend', 'count': weekend, 'code': 'WE', 'color': Colors.deepPurpleAccent},
-      {'label': 'Holiday', 'count': holiday, 'code': 'H', 'color': Colors.orange},
-      {'label': 'Late In', 'count': lateIn, 'code': 'P', 'color': Colors.pinkAccent},
-      {'label': 'Half Day', 'count': halfDay, 'code': 'hd', 'color': Colors.blue},
-      {'label': 'Tour', 'count': tour, 'code': 'T', 'color': Colors.indigo},
+      {'label': 'Present', 'count': present, 'code': 'P', 'color': getStatusColor('Present')},
+      {'label': 'Absent', 'count': absent, 'code': 'A', 'color': getStatusColor('Absent')},
+      {'label': 'On Leave', 'count': leave, 'code': 'L', 'color': getStatusColor('Leave')},
+      {'label': 'Weekend', 'count': weekend, 'code': 'WE', 'color': getStatusColor('Weekend')},
+      {'label': 'Holiday', 'count': holiday, 'code': 'H', 'color': getStatusColor('Holiday')},
+      {'label': 'Late In', 'count': lateIn, 'code': 'Late', 'color': getStatusColor('Late In')},
+      {'label': 'Half Day', 'count': halfDay, 'code': 'HD', 'color': getStatusColor('Half Day')},
+      {'label': 'Tour', 'count': tour, 'code': 'T', 'color': getStatusColor('Tour')},
     ];
 
     return Container(
@@ -549,9 +527,9 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
                       width: 28.w,
                       height: 28.h,
                       decoration: BoxDecoration(
-                        color: (item['color'] as Color).withOpacity(0.15),
+                        color: (item['color'] as Color).withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(6.r),
-                        border: Border.all(color: (item['color'] as Color).withOpacity(0.4)),
+                        border: Border.all(color: (item['color'] as Color).withValues(alpha: 0.4)),
                       ),
                       child: Center(
                         child: Text(
@@ -577,7 +555,7 @@ class _AttendanceCalendarScreenState extends State<AttendanceCalendarScreen> {
                     Container(
                       padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
                       decoration: BoxDecoration(
-                        color: (item['color'] as Color).withOpacity(0.1),
+                        color: (item['color'] as Color).withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12.r),
                       ),
                       child: Text(

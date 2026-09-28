@@ -2,7 +2,6 @@
 // 📁 lib/features/auth/screens/login_screen.dart
 // ─────────────────────────────────────────────────────────────
 // Professional login screen with form validation.
-// Demo credentials: admin@hrmis.com / password123
 // ============================================================
 
 import 'package:flutter/material.dart';
@@ -10,11 +9,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'dart:ui';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_strings.dart';
-import '../../../core/services/api_service.dart';
 import '../../../shared/widgets/custom_button.dart';
 import '../../../shared/widgets/custom_text_field.dart';
 
@@ -30,7 +27,7 @@ class _LoginScreenState extends State<LoginScreen>
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  bool _rememberMe = false;
+  final bool _rememberMe = true;
 
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
@@ -98,7 +95,9 @@ class _LoginScreenState extends State<LoginScreen>
                         _buildLogoSection(),
                         SizedBox(height: 52.h),
                         _buildFormCard(),
-                        SizedBox(height: 20.h),
+                        SizedBox(height: 24.h),
+                        _buildPoweredBy(),
+                        SizedBox(height: 28.h),
                       ],
                     ),
                   ),
@@ -163,13 +162,35 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildBackground() {
-    return Container(
-      height: 310.h,
-      decoration: const BoxDecoration(
-        gradient: AppColors.headerGradient,
-        borderRadius: BorderRadius.only(
+    return SizedBox(
+      height: 320.h,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
           bottomLeft: Radius.circular(40),
           bottomRight: Radius.circular(40),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/images/aidc_building.jpg',
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
+            ),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF0F172A).withValues(alpha: 0.80),
+                    const Color(0xFF1E3A8A).withValues(alpha: 0.86),
+                    const Color(0xFF0B192C).withValues(alpha: 0.94),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -179,18 +200,26 @@ class _LoginScreenState extends State<LoginScreen>
     return Column(
       children: [
         Container(
-          width: 80.w,
-          height: 80.h,
-          padding: EdgeInsets.all(18.r),
+          width: 88.w,
+          height: 88.h,
+          padding: EdgeInsets.all(12.r),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(22.r),
-            border: Border.all(color: Colors.white.withOpacity(0.3)),
-          ),
-          child: Icon(
-            Icons.business_center_rounded,
-            size: 42.sp,
             color: Colors.white,
+            borderRadius: BorderRadius.circular(22.r),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.18),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14.r),
+            child: Image.asset(
+              'assets/images/aidc_logo.png',
+              fit: BoxFit.contain,
+            ),
           ),
         ),
         SizedBox(height: 16.h),
@@ -234,20 +263,14 @@ class _LoginScreenState extends State<LoginScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              AppStrings.welcomeBack,
-              style: GoogleFonts.poppins(
-                fontSize: 22.sp,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            SizedBox(height: 4.h),
-            Text(
-              AppStrings.loginSubtitle,
-              style: GoogleFonts.poppins(
-                fontSize: 13.sp,
-                color: AppColors.textSecondary,
+            Center(
+              child: Text(
+                AppStrings.welcomeBack,
+                style: GoogleFonts.poppins(
+                  fontSize: 22.sp,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
               ),
             ),
             SizedBox(height: 16.h),
@@ -283,8 +306,7 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             SizedBox(height: 12.h),
             CustomTextField(
-              label: 'Email / Employee Code',
-              hint: 'Enter your email or employee code',
+              label: 'Employee Code', hint: 'Enter employee code',
               controller: _emailCtrl,
               keyboardType: TextInputType.text,
               prefixIcon: Icons.person_outline_rounded,
@@ -309,78 +331,7 @@ class _LoginScreenState extends State<LoginScreen>
                 return null;
               },
             ),
-            SizedBox(height: 12.h),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 20.w,
-                      height: 20.h,
-                      child: Checkbox(
-                        value: _rememberMe,
-                        onChanged: (v) => setState(() => _rememberMe = v!),
-                        activeColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4.r),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 8.w),
-                    Text(
-                      AppStrings.rememberMe,
-                      style: GoogleFonts.poppins(
-                        fontSize: 12.sp,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-                GestureDetector(
-                  onTap: () {},
-                  child: Text(
-                    AppStrings.forgotPassword,
-                    style: GoogleFonts.poppins(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 8.h),
-            Consumer<AuthProvider>(
-              builder: (_, auth, __) {
-                if (auth.errorMessage == null) return const SizedBox.shrink();
-                return Container(
-                  padding: EdgeInsets.all(12.r),
-                  margin: EdgeInsets.only(top: 8.h),
-                  decoration: BoxDecoration(
-                    color: AppColors.errorLight,
-                    borderRadius: BorderRadius.circular(10.r),
-                    border: Border.all(color: AppColors.error.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.error_outline, color: AppColors.error, size: 16.sp),
-                      SizedBox(width: 8.w),
-                      Expanded(
-                        child: Text(
-                          auth.errorMessage!,
-                          style: GoogleFonts.poppins(
-                            fontSize: 11.sp,
-                            color: AppColors.error,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-            SizedBox(height: 24.h),
+            SizedBox(height: 20.h),
             Consumer<AuthProvider>(
               builder: (_, auth, __) => CustomButton(
                 label: AppStrings.loginButton,
@@ -389,10 +340,65 @@ class _LoginScreenState extends State<LoginScreen>
                 prefixIcon: Icons.login_rounded,
               ),
             ),
-
           ],
         ),
       ),
     );
   }
-}
+
+  Widget _buildPoweredBy() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 32.w,
+              height: 1.h,
+              color: AppColors.border,
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10.w),
+              child: Text(
+                'POWERED BY',
+                style: GoogleFonts.poppins(
+                  fontSize: 10.5.sp,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.5,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+            ),
+            Container(
+              width: 32.w,
+              height: 1.h,
+              color: AppColors.border,
+            ),
+          ],
+        ),
+        SizedBox(height: 10.h),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 8.h),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14.r),
+            border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A000000),
+                blurRadius: 10,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Image.asset(
+            'assets/images/webcom_logo.png',
+            height: 32.h,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ],
+    );
+  }
+}

@@ -10,12 +10,8 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/app_colors.dart';
 import '../features/auth/providers/auth_provider.dart';
-import '../features/dashboard/screens/dashboard_screen.dart';
-import '../features/employees/screens/employees_screen.dart';
-import '../features/attendance/screens/attendance_screen.dart';
 import '../features/attendance/screens/employee_attendance_screen.dart';
 import '../features/attendance/screens/attendance_calendar_screen.dart';
-import '../features/leave/screens/leave_screen.dart';
 import '../features/profile/screens/profile_screen.dart';
 import '../core/providers/navigation_provider.dart';
 
@@ -27,42 +23,21 @@ class MainNavigation extends StatefulWidget {
 }
 
 class _MainNavigationState extends State<MainNavigation> {
-  // For Admin
-  late final List<Widget> _adminScreens;
-  late final List<_NavItem> _adminNavItems;
-
-  // For Non-Admin (Employee) - 4 TABS
-  late final List<Widget> _employeeScreens;
-  late final List<_NavItem> _employeeNavItems;
+  late final List<Widget> _screens;
+  late final List<_NavItem> _navItems;
 
   @override
   void initState() {
     super.initState();
 
-    // Admin Screens
-    _adminScreens = [
-      const DashboardScreen(),
-      const EmployeesScreen(),
-      const AttendanceScreen(),
-      const LeaveScreen(),
-      const ProfileScreen(),
-    ];
-    _adminNavItems = const [
-      _NavItem(icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard, label: 'Dashboard'),
-      _NavItem(icon: Icons.people_outline, activeIcon: Icons.people, label: 'Employees'),
-      _NavItem(icon: Icons.access_time_outlined, activeIcon: Icons.access_time_filled, label: 'Attendance'),
-      _NavItem(icon: Icons.event_note_outlined, activeIcon: Icons.event_note, label: 'Leave'),
-      _NavItem(icon: Icons.person_outline, activeIcon: Icons.person, label: 'Profile'),
+    _screens = const [
+      EmployeeAttendanceScreen(),
+      AttendanceCalendarScreen(),
+      ProfileScreen(),
     ];
 
-    // Employee Screens - 3 TABS
-    _employeeScreens = [
-      const EmployeeAttendanceScreen(),
-      const AttendanceCalendarScreen(),
-      const ProfileScreen(),
-    ];
-    _employeeNavItems = const [
-      _NavItem(icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard, label: 'Dashboard'),
+    _navItems = const [
+      _NavItem(icon: Icons.access_time_outlined, activeIcon: Icons.access_time_filled, label: 'Attendance'),
       _NavItem(icon: Icons.calendar_month_outlined, activeIcon: Icons.calendar_month, label: 'Calendar'),
       _NavItem(icon: Icons.person_outline, activeIcon: Icons.person, label: 'Profile'),
     ];
@@ -72,23 +47,16 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final navProv = context.watch<NavigationProvider>();
-    final isAdmin = auth.isAdmin;
 
     if (!auth.isLoggedIn) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
       });
     }
-    
-    final navItems = isAdmin ? _adminNavItems : _employeeNavItems;
-    final screens = isAdmin ? _adminScreens : _employeeScreens;
-    
-    // Safety check: if currentIndex is out of bounds (e.g. after logout/login with different roles)
-    // reset it to 0 or clamp it.
+
     int currentIndex = navProv.currentIndex;
-    if (currentIndex >= navItems.length) {
+    if (currentIndex >= _navItems.length) {
       currentIndex = 0;
-      // We use addPostFrameCallback to avoid calling notifyListeners during build
       WidgetsBinding.instance.addPostFrameCallback((_) {
         navProv.setIndex(0);
       });
@@ -105,7 +73,7 @@ class _MainNavigationState extends State<MainNavigation> {
       child: Scaffold(
         body: IndexedStack(
           index: currentIndex,
-          children: screens,
+          children: _screens,
         ),
         bottomNavigationBar: BottomNavigationBar(
           type: BottomNavigationBarType.fixed,
@@ -119,7 +87,7 @@ class _MainNavigationState extends State<MainNavigation> {
           selectedLabelStyle: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w500),
           unselectedLabelStyle: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w400),
           elevation: 8,
-          items: navItems.map((item) {
+          items: _navItems.map((item) {
             return BottomNavigationBarItem(
               icon: Icon(item.icon, size: 22.sp),
               activeIcon: Icon(item.activeIcon, size: 22.sp),
