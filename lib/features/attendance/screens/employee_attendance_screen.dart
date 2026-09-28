@@ -347,30 +347,17 @@ class _EmployeeAttendanceScreenState extends State<EmployeeAttendanceScreen> wit
                     borderRadius: BorderRadius.circular(16.r),
                     boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0, 2))],
                   ),
-                  child: Column(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.check_circle_rounded, color: AppColors.success, size: 22.sp),
-                          SizedBox(width: 8.w),
-                          Text(
-                            'Today\'s Attendance Completed',
-                            style: GoogleFonts.poppins(
-                              fontSize: 13.sp,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 6.h),
+                      Icon(Icons.check_circle_rounded, color: AppColors.success, size: 22.sp),
+                      SizedBox(width: 8.w),
                       Text(
-                        'Logged in: ${todayRec?.checkIn ?? '--'}  •  Logged out: ${todayRec?.checkOut ?? '--'}',
+                        'Today\'s Attendance Completed',
                         style: GoogleFonts.poppins(
-                          fontSize: 11.5.sp,
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 13.sp,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
                         ),
                       ),
                     ],
